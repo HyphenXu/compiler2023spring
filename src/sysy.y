@@ -2,16 +2,18 @@
 %code requires {
     #include <memory>
     #include <string>
+    #include "ast.h"
 }
 
 %{
 #include <iostream>
 #include <memory>
 #include <string>
+#include "ast.h"
 
 /* Necessary declarations. */
 int yylex();
-void yyerror(std::unique_ptr<std::string> &ast, const char *s);
+void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 
 using namespace std;
 %}
@@ -19,7 +21,7 @@ using namespace std;
 /** Define extra parameter for parser and error handler.
  *  With this pointer, we can store something for the AST after parsing.
  */
-%parse-param { std::unique_ptr<std::string> &ast }
+%parse-param { std::unique_ptr<BaseAST> &ast }
 
 /** Define yylval, as a union.
  *  Lexer will use them.
@@ -29,6 +31,7 @@ using namespace std;
     // 请自行 STFW 在 union 里写一个带析构函数的类会出现什么情况
     std::string *str_val;
     int int_val;
+    BaseAST *ast_val;
 }
 
 /* Declare all possible types of the tokens returned by the lexer */
@@ -37,18 +40,22 @@ using namespace std;
 %token  <int_val>    INT_CONST
 
 /* Define the types of non-terminators */
-%type <str_val> FuncDef FuncType Block Stmt Number
+%type <ast_val> FuncDef FuncType Block Stmt
+%type <int_val> Number
 
 %%
 
 /** The basic semantics here is: after CompUnit is parsed, what shall be
  *  done with the return value of parsing FuncDef, and what shall be
- *  returned to the caller of this parser.
+ *  returned to the caller of this parser, with the pre-defined
+ *  <%parse-param> "ast".
  *  $1 here is 'the return value of the first symbol'
  */
 CompUnit
     : FuncDef {
-        ast = unique_ptr<string>($1);
+        auto comp_unit = make_unique<CompUnitAST>();
+        comp_unit->func_def = unique_ptr<BaseAST>($1);
+        ast = move(comp_unit);
     }
     ;
 
@@ -61,37 +68,41 @@ CompUnit
  */
 FuncDef
     : FuncType IDENT '(' ')' Block {
-        auto type = unique_ptr<string>($1);
-        auto ident = unique_ptr<string>($2);
-        auto block = unique_ptr<string>($5);
-        $$ = new string(*type + " " + *ident + "() " + *block);
+        auto ast = new FuncDefAST();
+        ast->func_type = unique_ptr<BaseAST>($1);
+        ast->ident = *unique_ptr<string>($2);
+        ast->block = unique_ptr<BaseAST>($5);
+        $$ = ast;
     }
     ;
 
-
 FuncType
     : INT {
-        $$ = new string("int");
+        auto ast = new FuncTypeAST();
+        ast->type_string = string("int");
+        $$ = ast;
     }
     ;
 
 Block
     : '{' Stmt '}' {
-        auto stmt = unique_ptr<string>($2);
-        $$ = new string("{ " + *stmt + " }");
+        auto ast = new BlockAST();
+        ast->stmt = unique_ptr<BaseAST>($2);
+        $$ = ast;
     }
     ;
 
 Stmt
     : RETURN Number ';' {
-        auto number = unique_ptr<string>($2);
-        $$ = new string("return " + *number + ";");
+        auto ast = new StmtAST();
+        ast->number = $2;
+        $$ = ast;
     }
     ;
 
 Number
     : INT_CONST {
-        $$ = new string(to_string($1));
+        $$ = $1;
     }
     ;
 
@@ -102,6 +113,6 @@ Number
  *  upon error (e.g., syntax error), where the second argument
  *  is error message.
  */
-void yyerror(unique_ptr<string> &ast, const char *s) {
+void yyerror(unique_ptr<BaseAST> &ast, const char *s) {
     cerr << "error: " << s << endl;
 }
