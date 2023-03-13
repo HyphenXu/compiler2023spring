@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <iostream>
+#include <sstream>
 
 #include <cassert>
 
@@ -11,6 +12,8 @@ public:
     virtual ~BaseAST() = default;
 
     virtual void Dump() const = 0;
+
+    virtual void Dump2String(std::stringstream &ss) const = 0;
 };
 
 /* 
@@ -26,6 +29,12 @@ public:
         std::cout << number;
         std::cout << " }";
     }
+
+    void Dump2String(std::stringstream &ss) const override {
+        ss << "ret ";
+        ss << number;
+        ss << std::endl;
+    }
 };
 
 /* Block     ::= "{" Stmt "}"; */
@@ -38,6 +47,12 @@ public:
         stmt->Dump();
         std::cout << " }";
     }
+
+    void Dump2String(std::stringstream &ss) const override {
+        ss << "%entry:" << std::endl;
+            ss << "\t";
+            stmt->Dump2String(ss);
+    }
 };
 
 /* FuncType  ::= "int"; */
@@ -49,6 +64,10 @@ public:
         std::cout << "FuncTypeAST { ";
         std::cout << type_string;
         std::cout << " }";
+    }
+
+    void Dump2String(std::stringstream &ss) const override {
+        ss << "i32";
     }
 };
 
@@ -66,6 +85,16 @@ public:
         block->Dump();
         std::cout << " }";
     }
+
+    void Dump2String(std::stringstream &ss) const override {
+        ss << "fun ";
+        ss << "@main(";
+        ss << "): ";
+        func_type->Dump2String(ss);
+        ss << " {" << std::endl;
+        block->Dump2String(ss);
+        ss << "}" << std::endl;
+    }
 };
 
 /* CompUnit  ::= FuncDef; */
@@ -77,6 +106,11 @@ public:
         std::cout << "CompUnitAST { ";
         func_def->Dump();
         std::cout << " }";
+        std::cout << std::endl;
+    }
+
+    void Dump2String(std::stringstream &ss) const override {
+        func_def->Dump2String(ss);
     }
 };
 

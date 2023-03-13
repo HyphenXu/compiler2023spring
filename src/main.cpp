@@ -35,7 +35,15 @@ int main(int argc, const char *argv[]) {
 
     // dump AST
     ast->Dump();
-    cout << endl;
+
+    // dump StringFormatKoopaIR
+    stringstream ss;
+    string string_koopair;
+    ss.clear();
+    ss.str("");
+    ast->Dump2String(ss);
+    string_koopair = ss.str();
+    cout << string_koopair;
 
     return 0;
 }
