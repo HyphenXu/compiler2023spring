@@ -1,5 +1,18 @@
+# build
+build/
+
+# temporary files
+/*.koopa
+/*.riscv
+
+# coding reference and debug
+/koopa_header/
+/debug/
+
+# notes
+/norms/
+/notes/
+
+# misc
 *.DS_Store
-/build
-/norms
-/notes
-.vscode
+.vscode/

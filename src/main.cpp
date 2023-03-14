@@ -3,8 +3,11 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <cstring>
+#include <fstream>
 
 #include "ast.h"
+#include "koopair.h"
 
 using namespace std;
 
@@ -16,6 +19,11 @@ using namespace std;
 extern FILE *yyin;
 extern int yyparse(unique_ptr<BaseAST> &ast);
 
+typedef enum{
+    CMODE_KOOPA,
+    CMODE_RISCV,
+} cmode_t;
+
 int main(int argc, const char *argv[]) {
     // 解析命令行参数. 测试脚本/评测平台要求你的编译器能接收如下参数:
     // compiler 模式 输入文件 -o 输出文件
@@ -23,6 +31,17 @@ int main(int argc, const char *argv[]) {
     auto mode = argv[1];
     auto input = argv[2];
     auto output = argv[4];
+
+    cmode_t cmode;
+    if(strcmp(mode, "-koopa") == 0){
+        cmode = CMODE_KOOPA;
+    }
+    else if(strcmp(mode, "-riscv") == 0){
+        cmode = CMODE_RISCV;
+    }
+    else{
+        assert(false);
+    }
 
     // 打开输入文件, 并且指定 lexer 在解析的时候读取这个文件
     yyin = fopen(input, "r");
@@ -33,8 +52,8 @@ int main(int argc, const char *argv[]) {
     auto ret = yyparse(ast);
     assert(!ret);
 
-    // dump AST
-    ast->Dump();
+    // // dump AST
+    // ast->Dump();
 
     // dump StringFormatKoopaIR
     stringstream ss;
@@ -43,7 +62,20 @@ int main(int argc, const char *argv[]) {
     ss.str("");
     ast->Dump2String(ss);
     string_koopair = ss.str();
-    cout << string_koopair;
+
+    
+    if(cmode == CMODE_KOOPA){
+        FILE *fp_out = fopen(output, "w");
+        fprintf(fp_out, "%s", string_koopair.c_str());
+        return 0;
+    }
+
+    if(cmode == CMODE_RISCV){
+        ofstream fout(output);
+        streambuf* old_buffer = cout.rdbuf(fout.rdbuf());
+        libkoopa_string2rawprog(string_koopair.c_str());
+        cout.rdbuf(old_buffer);
+    }
 
     return 0;
 }
