@@ -10,5 +10,7 @@ int main() {
 
     /* "blahblah*" **  ***/
 
-    return 0;
+    return +(- -!6);  // looks like a kaomoji
+
+    // return 0;
 }

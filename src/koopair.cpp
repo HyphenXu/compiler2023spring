@@ -2,6 +2,18 @@
 
 #include <iostream>
 #include <cassert>
+#include <map>
+
+bool operator<(koopa_raw_binary_t a, koopa_raw_binary_t b){
+    return ((uint32_t)a.op == (uint32_t)b.op) ? 
+            (((uint64_t)a.lhs == (uint64_t)b.lhs) ?
+                ((uint64_t)a.rhs < (uint64_t)b.rhs)
+                : ((uint64_t)a.lhs < (uint64_t)b.lhs))
+            : ((uint32_t)a.op < (uint32_t)b.op);
+}
+
+static int register_counter = 0;
+static std::map<koopa_raw_binary_t, int> binary2reg;
 
 void Visit(const koopa_raw_slice_t &slice);
 
@@ -11,6 +23,7 @@ void Visit(const koopa_raw_value_t &value);
 
 void Visit(const koopa_raw_return_t &ret);
 void Visit(const koopa_raw_integer_t &integer);
+void Visit(const koopa_raw_binary_t &binary);
 
 void libkoopa_string2rawprog(const char *str){
     koopa_program_t program;
@@ -82,8 +95,12 @@ void Visit(const koopa_raw_value_t &value){
     case KOOPA_RVT_INTEGER:
         Visit(kind.data.integer);
         break;
+    case KOOPA_RVT_BINARY:
+        Visit(kind.data.binary);
+        break;
     default:
         /*TODO: Other raw value types*/
+        std::cout << kind.tag << std::endl;
         assert(false);
         break;
     }
@@ -91,11 +108,75 @@ void Visit(const koopa_raw_value_t &value){
 
 void Visit(const koopa_raw_return_t &ret){
     if(ret.value != nullptr){
-        Visit(ret.value);
+        if(ret.value->kind.tag == KOOPA_RVT_INTEGER){
+            std::cout << "\tli\t" << "a0" << ", ";
+            std::cout << ret.value->kind.data.integer.value;
+            std::cout << std::endl;
+        }
+        else{
+            if(ret.value->kind.tag == KOOPA_RVT_BINARY){
+                int regno = binary2reg[ret.value->kind.data.binary];
+                std::cout << "\tmv\t" << "a0, ";
+                std::cout << "t" << regno << std::endl;
+            }
+        }
     }
     std::cout << "\tret" << std::endl;
 }
 
 void Visit(const koopa_raw_integer_t &integer){
-    std::cout << "\tli " << "a0, " << integer.value << std::endl;
+    // std::cout << "\tli " << "a0, " << integer.value << std::endl;
+    std::cout << "\tli\t" << "t" << register_counter++ << ", ";
+    std::cout << integer.value << std::endl;
+    
+}
+
+void Visit(const koopa_raw_binary_t &binary){
+    koopa_raw_binary_op_t op = binary.op;
+    koopa_raw_value_t lhs = binary.lhs;
+    koopa_raw_value_t rhs = binary.rhs;
+    switch (op)
+    {
+    case KOOPA_RBO_EQ:
+        if(lhs->kind.tag == KOOPA_RVT_INTEGER &&
+                lhs->kind.data.integer.value == 0){
+            Visit(rhs);
+            std::cout << "\txor\t" << "t" << register_counter - 1 << ", ";
+            std::cout << "t" << register_counter - 1 << ", x0" << std::endl;
+            std::cout << "\tseqz\t" << "t" << register_counter - 1 << ", ";
+            std::cout << "t" << register_counter - 1 << std::endl;
+            binary2reg[binary] = register_counter - 1;
+        }
+        else if(rhs->kind.tag == KOOPA_RVT_INTEGER &&
+                rhs->kind.data.integer.value == 0){
+            Visit(lhs);
+            std::cout << "\txor\t" << "t" << register_counter - 1 << ", ";
+            std::cout << "t" << register_counter - 1 << ", x0" << std::endl;
+            std::cout << "\tseqz\t" << "t" << register_counter - 1 << ", ";
+            std::cout << "t" << register_counter - 1 << std::endl;
+            binary2reg[binary] = register_counter - 1;
+        }
+        else{
+            /* TODO */
+            assert(false);
+        }
+        break;
+    case KOOPA_RBO_SUB:
+        if(rhs->kind.tag == KOOPA_RVT_BINARY){
+            int regno = binary2reg[rhs->kind.data.binary];
+            std::cout << "\tsub\t" << "t" << register_counter++ << ", ";
+            std::cout << "x0, " << "t" << regno << std::endl;
+            binary2reg[binary] = register_counter - 1;
+        }
+        else if(rhs->kind.tag == KOOPA_RVT_INTEGER){
+            Visit(rhs);
+            std::cout << "\tsub\t" << "t" << register_counter << ", ";
+            std::cout << "x0, " <<  "t" << register_counter - 1 << std::endl;
+            register_counter++;
+            binary2reg[binary] = register_counter - 1;
+        }
+        break;
+    default:
+        break;
+    }
 }

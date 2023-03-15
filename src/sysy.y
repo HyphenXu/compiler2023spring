@@ -35,13 +35,15 @@ using namespace std;
 }
 
 /* Declare all possible types of the tokens returned by the lexer */
-%token  INT          RETURN
+%token INT RETURN
 %token  <str_val>    IDENT
 %token  <int_val>    INT_CONST
 
 /* Define the types of non-terminators */
 %type <ast_val> FuncDef FuncType Block Stmt
+%type <ast_val> Exp PrimaryExp UnaryExp
 %type <int_val> Number
+%type <str_val> UnaryOp
 
 %%
 
@@ -93,9 +95,32 @@ Block
     ;
 
 Stmt
-    : RETURN Number ';' {
+    : RETURN Exp ';' {
         auto ast = new StmtAST();
-        ast->number = $2;
+        ast->exp = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    ;
+
+Exp
+    : UnaryExp {
+        auto ast = new ExpAST();
+        ast->unaryexp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    ;
+
+PrimaryExp
+    : '(' Exp ')' {
+        auto ast = new PrimaryExpAST();
+        ast->rule = 1;
+        ast->exp = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    | Number {
+        auto ast = new PrimaryExpAST();
+        ast->rule = 2;
+        ast->number = $1;
         $$ = ast;
     }
     ;
@@ -104,6 +129,28 @@ Number
     : INT_CONST {
         $$ = $1;
     }
+    ;
+
+UnaryExp
+    : PrimaryExp {
+        auto ast = new UnaryExpAST();
+        ast->rule = 1;
+        ast->primaryexp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | UnaryOp UnaryExp {
+        auto ast = new UnaryExpAST();
+        ast->rule = 2;
+        ast->unaryop = *unique_ptr<string>($1);
+        ast->unaryexp = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    ;
+
+UnaryOp
+    : '+' { auto op = new string("+"); $$ = op; }
+    | '-' { auto op = new string("-"); $$ = op; }
+    | '!' { auto op = new string("!"); $$ = op; }
     ;
 
 %%
