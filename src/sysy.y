@@ -35,13 +35,15 @@ using namespace std;
 }
 
 /* Declare all possible types of the tokens returned by the lexer */
-%token INT RETURN
-%token  <str_val>    IDENT
-%token  <int_val>    INT_CONST
+%token              INT RETURN
+%token  <str_val>   IDENT 
+%token  <int_val>   INT_CONST
+%token  <str_val>   ORDEREDCOMPOP UNORDEREDCOMPOP LOGICAND LOGICOR
 
 /* Define the types of non-terminators */
 %type <ast_val> FuncDef FuncType Block Stmt
 %type <ast_val> Exp PrimaryExp UnaryExp MulExp AddExp
+%type <ast_val> RelExp EqExp LAndExp LOrExp
 %type <int_val> Number
 %type <str_val> UnaryOp
 
@@ -103,9 +105,9 @@ Stmt
     ;
 
 Exp
-    : AddExp {
+    : LOrExp {
         auto ast = new ExpAST();
-        ast->addexp = unique_ptr<BaseAST>($1); 
+        ast->lorexp = unique_ptr<BaseAST>($1); 
         $$ = ast;
     }
     ;
@@ -209,6 +211,90 @@ AddExp
         ast->mulexp = unique_ptr<BaseAST>($3);
         $$ = ast;
     };
+
+RelExp
+    : AddExp {
+        auto ast = new RelExpAST();
+        ast->rule = 1;
+        ast->addexp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | RelExp '<' AddExp {
+        auto ast = new RelExpAST();
+        ast->rule = 2;
+        ast->relexp = unique_ptr<BaseAST>($1);
+        ast->op = "<";
+        ast->addexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | RelExp '>' AddExp {
+        auto ast = new RelExpAST();
+        ast->rule = 3;
+        ast->relexp = unique_ptr<BaseAST>($1);
+        ast->op = ">";
+        ast->addexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | RelExp ORDEREDCOMPOP AddExp {
+        auto ast = new RelExpAST();
+        ast->rule = 4;
+        ast->relexp = unique_ptr<BaseAST>($1);
+        ast->op = *unique_ptr<string>($2);
+        ast->addexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
+
+EqExp
+    : RelExp {
+        auto ast = new EqExpAST();
+        ast->rule = 1;
+        ast->relexp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | EqExp UNORDEREDCOMPOP RelExp {
+        auto ast = new EqExpAST();
+        ast->rule = 2;
+        ast->eqexp = unique_ptr<BaseAST>($1);
+        ast->op = *unique_ptr<string>($2);
+        ast->relexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
+
+LAndExp
+    : EqExp {
+        auto ast = new LAndExpAST();
+        ast->rule = 1;
+        ast->eqexp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | LAndExp LOGICAND EqExp {
+        auto ast = new LAndExpAST();
+        ast->rule = 2;
+        ast->landexp = unique_ptr<BaseAST>($1);
+        ast->op = *unique_ptr<string>($2);
+        ast->eqexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
+
+LOrExp
+    : LAndExp {
+        auto ast = new LOrExpAST();
+        ast->rule = 1;
+        ast->landexp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | LOrExp LOGICOR LAndExp {
+        auto ast = new LOrExpAST();
+        ast->rule = 2;
+        ast->lorexp = unique_ptr<BaseAST>($1);
+        ast->op = *unique_ptr<string>($2);
+        ast->landexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
 
 %%
 

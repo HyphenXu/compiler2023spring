@@ -24,6 +24,258 @@ public:
     virtual ast_ret_t Dump2String(std::stringstream &ss) const = 0;
 };
 
+/* LOrExp      ::= LAndExp | LOrExp "||" LAndExp; */
+class LOrExpAST : public BaseAST {
+public:
+    int rule;
+    std::unique_ptr<BaseAST> landexp;
+    std::unique_ptr<BaseAST> lorexp;
+    std::string op;
+
+    void Dump() const override {
+        std::cout << "LOrExpAST { ";
+        if(rule == 1){
+            landexp->Dump();
+        }
+        else{
+            lorexp->Dump();
+            std::cout << " " << op << " ";
+            landexp->Dump();
+        }
+        std::cout << " }";
+    }
+
+    ast_ret_t Dump2String(std::stringstream &ss) const override {
+        if(rule == 1){
+            return landexp->Dump2String(ss);
+        }
+        else{
+            ast_ret_t ret;
+            ast_ret_t ret1 = lorexp->Dump2String(ss);
+            ast_ret_t ret2 = landexp->Dump2String(ss);
+            ret.result_id = result_id++;
+            assert(op == "||");
+            ss << "\t%" << ret.result_id << " = or ";
+            ret.result_number = ret1.result_number || ret2.result_number;
+
+            ret.depth = std::max(ret1.depth, ret2.depth) + 1;
+            if(ret1.depth == 0){
+                ss << ret1.result_number;
+            }
+            else{
+                ss << "%" << ret1.result_id;
+            }
+            ss << ", ";
+            if(ret2.depth == 0){
+                ss << ret2.result_number;
+            }
+            else{
+                ss << "%" << ret2.result_id;
+            }
+            ss << std::endl;
+
+            ret.result_id = result_id++;
+            ss << "\t%" << ret.result_id << " = ne 0, %";
+            ss << ret.result_id - 1 << std::endl;
+
+            return ret;
+        }
+    }
+};
+
+/* LAndExp     ::= EqExp | LAndExp "&&" EqExp; */
+class LAndExpAST : public BaseAST {
+public:
+    int rule;
+    std::unique_ptr<BaseAST> eqexp;
+    std::unique_ptr<BaseAST> landexp;
+    std::string op;
+
+    void Dump() const override {
+        std::cout << "LAndExpAST { ";
+        if(rule == 1){
+            eqexp->Dump();
+        }
+        else{
+            landexp->Dump();
+            std::cout << " " << op << " ";
+            eqexp->Dump();
+        }
+        std::cout << " }";
+    }
+
+    ast_ret_t Dump2String(std::stringstream &ss) const override {
+        if(rule == 1){
+            return eqexp->Dump2String(ss);
+        }
+        else{
+            ast_ret_t ret;
+            ast_ret_t ret1 = landexp->Dump2String(ss);
+            ast_ret_t ret2 = eqexp->Dump2String(ss);
+            assert(op == "&&");
+
+            ss << "\t%" << result_id++ << " = ne 0, ";
+            if(ret1.depth == 0){
+                ss << ret1.result_number;
+            }
+            else{
+                ss << "%" << ret1.result_id;
+            }
+            ss << std::endl;
+
+            ss << "\t%" << result_id++ << " = ne 0, ";
+            if(ret2.depth == 0){
+                ss << ret2.result_number;
+            }
+            else{
+                ss << "%" << ret2.result_id;
+            }
+            ss << std::endl;
+
+            ret.result_id = result_id++;
+            ret.result_number = ret1.result_number && ret2.result_number;
+            ret.depth = std::max(ret1.depth, ret2.depth) + 1;
+            ss  << "\t%" << ret.result_id << " = and %"
+                << ret.result_id - 1 << ", %" << ret.result_id - 2
+                << std::endl;
+            return ret;
+        }
+    }
+};
+
+/* EqExp       ::= RelExp | EqExp ("==" | "!=") RelExp; */
+class EqExpAST : public BaseAST {
+public:
+    int rule;
+    std::unique_ptr<BaseAST> relexp;
+    std::unique_ptr<BaseAST> eqexp;
+    std::string op;
+
+    void Dump() const override {
+        std::cout << "EqExpAST { ";
+        if(rule == 1){
+            relexp->Dump();
+        }
+        else{
+            eqexp->Dump();
+            std::cout << " " << op << " ";
+            relexp->Dump();
+        }
+        std::cout << " }";
+    }
+
+    ast_ret_t Dump2String(std::stringstream &ss) const override {
+        if(rule == 1){
+            return relexp->Dump2String(ss);
+        }
+        else{
+            ast_ret_t ret;
+            ast_ret_t ret1 = relexp->Dump2String(ss);
+            ast_ret_t ret2 = eqexp->Dump2String(ss);
+            ret.result_id = result_id++;
+            if(op == "=="){
+                ss << "\t%" << ret.result_id << " = eq ";
+                ret.result_number = ret1.result_number == ret2.result_number;
+            }
+            else if(op == "!="){
+                ss << "\t%" << ret.result_id << " = ne ";
+                ret.result_number = ret1.result_number != ret2.result_number;
+            }
+            else{
+                assert(false);
+            }
+
+            ret.depth = std::max(ret1.depth, ret2.depth) + 1;
+            if(ret1.depth == 0){
+                ss << ret1.result_number;
+            }
+            else{
+                ss << "%" << ret1.result_id;
+            }
+            ss << ", ";
+            if(ret2.depth == 0){
+                ss << ret2.result_number;
+            }
+            else{
+                ss << "%" << ret2.result_id;
+            }
+            ss << std::endl;
+            return ret;
+        }
+    }
+};
+
+/* RelExp      ::= AddExp | RelExp ("<" | ">" | "<=" | ">=") AddExp; */
+class RelExpAST : public BaseAST {
+public:
+    int rule;
+    std::unique_ptr<BaseAST> addexp;
+    std::unique_ptr<BaseAST> relexp;
+    std::string op;
+
+    void Dump() const override {
+        std::cout << "RelExpAST { ";
+        if(rule == 1){
+            addexp->Dump();
+        }
+        else{
+            relexp->Dump();
+            std::cout << " " << op << " ";
+            addexp->Dump();
+        }
+        std::cout << " }";
+    }
+
+    ast_ret_t Dump2String(std::stringstream &ss) const override {
+        if(rule == 1){
+            return addexp->Dump2String(ss);
+        }
+        else{
+            ast_ret_t ret;
+            ast_ret_t ret1 = relexp->Dump2String(ss);
+            ast_ret_t ret2 = addexp->Dump2String(ss);
+            ret.result_id = result_id++;
+            if(op == "<"){
+                ss << "\t%" << ret.result_id << " = lt ";
+                ret.result_number = ret1.result_number < ret2.result_number;
+            }
+            else if(op == ">"){
+                ss << "\t%" << ret.result_id << " = gt ";
+                ret.result_number = ret1.result_number > ret2.result_number;
+            }
+            else if(op == "<="){
+                ss << "\t%" << ret.result_id << " = le ";
+                ret.result_number = ret1.result_number <= ret2.result_number;
+            }
+            else if(op == ">="){
+                ss << "\t%" << ret.result_id << " = ge ";
+                ret.result_number = ret1.result_number >= ret2.result_number;
+            }
+            else{
+                assert(false);
+            }
+
+            ret.depth = std::max(ret1.depth, ret2.depth) + 1;
+            if(ret1.depth == 0){
+                ss << ret1.result_number;
+            }
+            else{
+                ss << "%" << ret1.result_id;
+            }
+            ss << ", ";
+            if(ret2.depth == 0){
+                ss << ret2.result_number;
+            }
+            else{
+                ss << "%" << ret2.result_id;
+            }
+            ss << std::endl;
+            return ret;
+        }
+    }
+};
+
+
 /* AddExp      ::= MulExp | AddExp ("+" | "-") MulExp; */
 class AddExpAST : public BaseAST {
 public:
@@ -258,19 +510,19 @@ public:
     }
 };
 
-/* Exp         ::= AddExp; */
+/* Exp         ::= LOrExp; */
 class ExpAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> addexp;
+    std::unique_ptr<BaseAST> lorexp;
 
     void Dump() const override {
         std::cout << "ExpAST { ";
-        addexp->Dump();
+        lorexp->Dump();
         std::cout << " }";
     }
 
     ast_ret_t Dump2String(std::stringstream &ss) const override {
-        return addexp->Dump2String(ss);
+        return lorexp->Dump2String(ss);
     }
 };
 

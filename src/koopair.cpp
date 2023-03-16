@@ -178,11 +178,57 @@ void Visit(const koopa_raw_binary_t &binary){
 
     switch (op)
     {
+    case KOOPA_RBO_NOT_EQ:
+        if(reg_lhs == "x0"){
+            std::cout   << "\tsnez\t" << reg_result << ", " << reg_rhs
+                        << std::endl;
+        }
+        else if(reg_rhs == "x0"){
+            std::cout   << "\tsnez\t" << reg_result << ", " << reg_lhs
+                        << std::endl;
+        }
+        else{
+            std::cout   << "\txor\t" << reg_result << ", " << reg_lhs
+                        << ", " << reg_rhs << std::endl;
+            std::cout   << "\tsnez\t" << reg_result << ", " << reg_result
+                        << std::endl;
+        }
+        break;
     case KOOPA_RBO_EQ:
-        std::cout   << "\txor\t" << reg_result << ", " << reg_lhs << ", "
+        if(reg_lhs == "x0"){
+            std::cout   << "\tsnez\t" << reg_result << ", " << reg_rhs
+                        << std::endl;
+        }
+        else if(reg_rhs == "x0"){
+            std::cout   << "\tsnez\t" << reg_result << ", " << reg_lhs
+                        << std::endl;
+        }
+        else{
+            std::cout   << "\txor\t" << reg_result << ", " << reg_lhs
+                        << ", " << reg_rhs << std::endl;
+            std::cout   << "\tsnez\t" << reg_result << ", " << reg_result
+                        << std::endl;
+        }
+        break;
+    case KOOPA_RBO_GT:
+        std::cout   << "\tslt\t" << reg_result << ", " << reg_rhs << ", "
+                    << reg_lhs << std::endl;
+        break;
+    case KOOPA_RBO_LT:
+        std::cout   << "\tslt\t" << reg_result << ", " << reg_lhs << ", "
                     << reg_rhs << std::endl;
-        std::cout   << "\tseqz\t" << reg_result << ", " << reg_result
-                    << std::endl;
+        break;
+    case KOOPA_RBO_GE:
+        std::cout   << "\tslt\t" << reg_result << ", " << reg_lhs << ", "
+                    << reg_rhs << std::endl;
+        std::cout   << "\txori\t" << reg_result << ", " << reg_result
+                    << ", 1" << std::endl; 
+        break;
+    case KOOPA_RBO_LE:
+        std::cout   << "\tslt\t" << reg_result << ", " << reg_rhs << ", "
+                    << reg_lhs << std::endl;
+        std::cout   << "\txori\t" << reg_result << ", " << reg_result
+                    << ", 1" << std::endl; 
         break;
     case KOOPA_RBO_ADD:
         std::cout   << "\tadd\t" << reg_result << ", "
@@ -204,7 +250,14 @@ void Visit(const koopa_raw_binary_t &binary){
         std::cout   << "\trem\t" << reg_result << ", "
                     << reg_lhs << ", " << reg_rhs << std::endl;
         break;
-
+    case KOOPA_RBO_AND:
+        std::cout   << "\tand\t" << reg_result << ", " << reg_lhs << ", "
+                    << reg_rhs << std::endl;
+        break;
+    case KOOPA_RBO_OR:
+        std::cout   << "\tor\t" << reg_result << ", " << reg_lhs << ", "
+                    << reg_rhs << std::endl;
+        break;
     default:
         std::cout << op << std::endl;
         assert(false);

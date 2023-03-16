@@ -27,6 +27,12 @@ Decimal         [1-9][0-9]*
 Octal           0[0-7]*
 Hexadecimal     0[xX][0-9a-fA-F]+
 
+/* Operators */
+OrderedCompOp   [<>]=
+UnorderedCompOp [!=]=
+LogicAnd        "&&"
+LogicOr         "||"
+
 %%
 
 {WhiteSpace}    { /* Ignore; nop */ }
@@ -41,6 +47,12 @@ Hexadecimal     0[xX][0-9a-fA-F]+
 {Decimal}       { yylval.int_val = strtol(yytext, nullptr, 0); return INT_CONST; }
 {Octal}         { yylval.int_val = strtol(yytext, nullptr, 0); return INT_CONST; }
 {Hexadecimal}   { yylval.int_val = strtol(yytext, nullptr, 0); return INT_CONST; }
+
+{OrderedCompOp}     { yylval.str_val = new string(yytext); return ORDEREDCOMPOP; }
+{UnorderedCompOp}   { yylval.str_val = new string(yytext); return UNORDEREDCOMPOP; }
+{LogicAnd}           { yylval.str_val = new string(yytext); return LOGICAND; }
+{LogicOr}           { yylval.str_val = new string(yytext); return LOGICOR; }
+
 
 .               { return yytext[0]; }
 
