@@ -10,7 +10,13 @@ int main() {
 
     /* "blahblah*" **  ***/
 
-    return +(- -!6);  // looks like a kaomoji
+    // return +(- -!6);  // looks like a kaomoji
+
+    return 1 + 2 * 3 + 4 / 5 - 6 % 7;
+
+    // return 4 * 1 + 2 * 3;
+
+    // return 1+ +(- -!6)*2;
 
     // return 0;
 }

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cassert>
 #include <map>
+#include <string>
 
 bool operator<(koopa_raw_binary_t a, koopa_raw_binary_t b){
     return ((uint32_t)a.op == (uint32_t)b.op) ? 
@@ -13,7 +14,7 @@ bool operator<(koopa_raw_binary_t a, koopa_raw_binary_t b){
 }
 
 static int register_counter = 0;
-static std::map<koopa_raw_binary_t, int> binary2reg;
+static std::map<koopa_raw_binary_t, std::string> binary2reg;
 
 void Visit(const koopa_raw_slice_t &slice);
 
@@ -115,9 +116,9 @@ void Visit(const koopa_raw_return_t &ret){
         }
         else{
             if(ret.value->kind.tag == KOOPA_RVT_BINARY){
-                int regno = binary2reg[ret.value->kind.data.binary];
+                std::string reg = binary2reg[ret.value->kind.data.binary];
                 std::cout << "\tmv\t" << "a0, ";
-                std::cout << "t" << regno << std::endl;
+                std::cout << reg << std::endl;
             }
         }
     }
@@ -135,48 +136,78 @@ void Visit(const koopa_raw_binary_t &binary){
     koopa_raw_binary_op_t op = binary.op;
     koopa_raw_value_t lhs = binary.lhs;
     koopa_raw_value_t rhs = binary.rhs;
+    std::string reg_lhs, reg_rhs;
+    std::string reg_result;
+
+    if(lhs->kind.tag == KOOPA_RVT_INTEGER){
+        if(lhs->kind.data.integer.value == 0){
+            reg_lhs = "x0";
+        }
+        else{
+            reg_lhs = "t" + std::to_string(register_counter); 
+            Visit(lhs->kind.data.integer);
+        }
+    }
+    else{
+        assert(lhs->kind.tag == KOOPA_RVT_BINARY);
+        reg_lhs = binary2reg[lhs->kind.data.binary];
+    }
+    if(rhs->kind.tag == KOOPA_RVT_INTEGER){
+        if(rhs->kind.data.integer.value == 0){
+            reg_rhs = "x0";
+        }
+        else{
+            reg_rhs = "t" + std::to_string(register_counter); 
+            Visit(rhs->kind.data.integer);
+        }
+    }
+    else{
+        assert(rhs->kind.tag == KOOPA_RVT_BINARY);
+        reg_rhs = binary2reg[rhs->kind.data.binary];
+    }
+
+    /*  TODO:
+        what if both "x0"?
+        better policy; 
+        check if the value in reg is no longer needed
+    */
+    // reg_result = ((reg_rhs == "x0") ? reg_lhs : reg_rhs);
+    // binary2reg[binary] = reg_result;
+    reg_result = "t" + std::to_string(register_counter++);
+    binary2reg[binary] = reg_result;
+
     switch (op)
     {
     case KOOPA_RBO_EQ:
-        if(lhs->kind.tag == KOOPA_RVT_INTEGER &&
-                lhs->kind.data.integer.value == 0){
-            Visit(rhs);
-            std::cout << "\txor\t" << "t" << register_counter - 1 << ", ";
-            std::cout << "t" << register_counter - 1 << ", x0" << std::endl;
-            std::cout << "\tseqz\t" << "t" << register_counter - 1 << ", ";
-            std::cout << "t" << register_counter - 1 << std::endl;
-            binary2reg[binary] = register_counter - 1;
-        }
-        else if(rhs->kind.tag == KOOPA_RVT_INTEGER &&
-                rhs->kind.data.integer.value == 0){
-            Visit(lhs);
-            std::cout << "\txor\t" << "t" << register_counter - 1 << ", ";
-            std::cout << "t" << register_counter - 1 << ", x0" << std::endl;
-            std::cout << "\tseqz\t" << "t" << register_counter - 1 << ", ";
-            std::cout << "t" << register_counter - 1 << std::endl;
-            binary2reg[binary] = register_counter - 1;
-        }
-        else{
-            /* TODO */
-            assert(false);
-        }
+        std::cout   << "\txor\t" << reg_result << ", " << reg_lhs << ", "
+                    << reg_rhs << std::endl;
+        std::cout   << "\tseqz\t" << reg_result << ", " << reg_result
+                    << std::endl;
+        break;
+    case KOOPA_RBO_ADD:
+        std::cout   << "\tadd\t" << reg_result << ", "
+                    << reg_lhs << ", " << reg_rhs << std::endl;
         break;
     case KOOPA_RBO_SUB:
-        if(rhs->kind.tag == KOOPA_RVT_BINARY){
-            int regno = binary2reg[rhs->kind.data.binary];
-            std::cout << "\tsub\t" << "t" << register_counter++ << ", ";
-            std::cout << "x0, " << "t" << regno << std::endl;
-            binary2reg[binary] = register_counter - 1;
-        }
-        else if(rhs->kind.tag == KOOPA_RVT_INTEGER){
-            Visit(rhs);
-            std::cout << "\tsub\t" << "t" << register_counter << ", ";
-            std::cout << "x0, " <<  "t" << register_counter - 1 << std::endl;
-            register_counter++;
-            binary2reg[binary] = register_counter - 1;
-        }
+        std::cout   << "\tsub\t" << reg_result << ", "
+                    << reg_lhs << ", " << reg_rhs << std::endl;
         break;
+    case KOOPA_RBO_MUL:
+        std::cout   << "\tmul\t" << reg_result << ", "
+                << reg_lhs << ", " << reg_rhs << std::endl;
+        break;
+    case KOOPA_RBO_DIV:
+        std::cout   << "\tdiv\t" << reg_result << ", "
+                    << reg_lhs << ", " << reg_rhs << std::endl;
+        break;
+    case KOOPA_RBO_MOD:
+        std::cout   << "\trem\t" << reg_result << ", "
+                    << reg_lhs << ", " << reg_rhs << std::endl;
+        break;
+
     default:
+        std::cout << op << std::endl;
+        assert(false);
         break;
     }
 }

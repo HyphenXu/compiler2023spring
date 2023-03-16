@@ -41,7 +41,7 @@ using namespace std;
 
 /* Define the types of non-terminators */
 %type <ast_val> FuncDef FuncType Block Stmt
-%type <ast_val> Exp PrimaryExp UnaryExp
+%type <ast_val> Exp PrimaryExp UnaryExp MulExp AddExp
 %type <int_val> Number
 %type <str_val> UnaryOp
 
@@ -103,9 +103,9 @@ Stmt
     ;
 
 Exp
-    : UnaryExp {
+    : AddExp {
         auto ast = new ExpAST();
-        ast->unaryexp = unique_ptr<BaseAST>($1);
+        ast->addexp = unique_ptr<BaseAST>($1); 
         $$ = ast;
     }
     ;
@@ -152,6 +152,63 @@ UnaryOp
     | '-' { auto op = new string("-"); $$ = op; }
     | '!' { auto op = new string("!"); $$ = op; }
     ;
+
+MulExp
+    : UnaryExp {
+        auto ast = new MulExpAST();
+        ast->rule = 1;
+        ast->unaryexp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | MulExp '*' UnaryExp {
+        auto ast = new MulExpAST();
+        ast->rule = 2;
+        ast->mulexp = unique_ptr<BaseAST>($1);
+        ast->op = "*";
+        ast->unaryexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | MulExp '/' UnaryExp {
+        auto ast = new MulExpAST();
+        ast->rule = 3;
+        ast->mulexp = unique_ptr<BaseAST>($1);
+        ast->op = "/";
+        ast->unaryexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | MulExp '%' UnaryExp {
+        auto ast = new MulExpAST();
+        ast->rule = 4;
+        ast->mulexp = unique_ptr<BaseAST>($1);
+        ast->op = "%";
+        ast->unaryexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
+
+AddExp
+    : MulExp {
+        auto ast = new AddExpAST();
+        ast->rule = 1;
+        ast->mulexp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | AddExp '+' MulExp {
+        auto ast = new AddExpAST();
+        ast->rule = 2;
+        ast->addexp = unique_ptr<BaseAST>($1);
+        ast->op = "+";
+        ast->mulexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | AddExp '-' MulExp {
+        auto ast = new AddExpAST();
+        ast->rule = 3;
+        ast->addexp = unique_ptr<BaseAST>($1);
+        ast->op = "-";
+        ast->mulexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    };
 
 %%
 

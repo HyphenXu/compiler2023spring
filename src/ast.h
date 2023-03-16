@@ -7,11 +7,12 @@
 
 #include <cassert>
 
-static int var_id = 0;
+static int result_id = 0;
 
 typedef struct{
     int depth;
-    int number;
+    int result_number;
+    int result_id;
 }ast_ret_t;
 
 class BaseAST {
@@ -21,6 +22,140 @@ public:
     virtual void Dump() const = 0;
 
     virtual ast_ret_t Dump2String(std::stringstream &ss) const = 0;
+};
+
+/* AddExp      ::= MulExp | AddExp ("+" | "-") MulExp; */
+class AddExpAST : public BaseAST {
+public:
+    int rule;
+    std::unique_ptr<BaseAST> mulexp;
+    std::unique_ptr<BaseAST> addexp;
+    std::string op;
+
+    void Dump() const override {
+        std::cout << "AddExpAST { ";
+        if(rule == 1){
+            mulexp->Dump();
+        }
+        else{
+            addexp->Dump();
+            std::cout << " " << op << " ";
+            mulexp->Dump();
+        }
+        std::cout << " }";
+    }
+
+    ast_ret_t Dump2String(std::stringstream &ss) const override {
+        if(rule == 1){
+            return mulexp->Dump2String(ss);
+        }
+        else{
+            ast_ret_t ret;
+            ast_ret_t ret1 = addexp->Dump2String(ss);
+            ast_ret_t ret2 = mulexp->Dump2String(ss);
+            ret.result_id = result_id++;
+            switch (op[0])
+            {
+            case '+':
+                ss << "\t%" << ret.result_id << " = add ";
+                ret.result_number = ret1.result_number + ret2.result_number;
+                break;
+            case '-':
+                ss << "\t%" << ret.result_id << " = sub ";
+                ret.result_number = ret1.result_number - ret2.result_number;
+                break;
+            default:
+                assert(false);
+                break;
+            }
+
+            ret.depth = std::max(ret1.depth, ret2.depth) + 1;
+            if(ret1.depth == 0){
+                ss << ret1.result_number;
+            }
+            else{
+                ss << "%" << ret1.result_id;
+            }
+            ss << ", ";
+            if(ret2.depth == 0){
+                ss << ret2.result_number;
+            }
+            else{
+                ss << "%" << ret2.result_id;
+            }
+            ss << std::endl;
+            return ret;
+        }
+    }
+};
+
+/* MulExp      ::= UnaryExp | MulExp ("*" | "/" | "%") UnaryExp; */
+class MulExpAST : public BaseAST {
+public:
+    int rule;
+    std::unique_ptr<BaseAST> unaryexp;
+    std::unique_ptr<BaseAST> mulexp;
+    std::string op;
+
+    void Dump() const override {
+        std::cout << "MulExpAST { ";
+        if(rule == 1){
+            unaryexp->Dump();
+        }
+        else{
+            mulexp->Dump();
+            std::cout << " " << op << " ";
+            unaryexp->Dump();
+        }
+        std::cout << " }";
+    }
+
+    ast_ret_t Dump2String(std::stringstream &ss) const override {
+        if(rule == 1){
+            return unaryexp->Dump2String(ss);
+        }
+        else{
+            ast_ret_t ret;
+            ast_ret_t ret1 = mulexp->Dump2String(ss);
+            ast_ret_t ret2 = unaryexp->Dump2String(ss);
+            ret.result_id = result_id++;
+            switch (op[0])
+            {
+            case '/':
+                ss << "\t%" << ret.result_id << " = div ";
+                ret.result_number = ret1.result_number / ret2.result_number;
+                break;
+            case '*':
+                ss << "\t%" << ret.result_id << " = mul ";
+                ret.result_number = ret1.result_number * ret2.result_number;
+                break;
+            case '%':
+                ss << "\t%" << ret.result_id << " = mod ";
+                ret.result_number = ret1.result_number % ret2.result_number;
+                break;
+            default:
+                assert(false);
+                break;
+            }
+
+            ret.depth = std::max(ret1.depth, ret2.depth) + 1;
+            if(ret1.depth == 0){
+                ss << ret1.result_number;
+            }
+            else{
+                ss << "%" << ret1.result_id;
+            }
+            ss << ", ";
+            if(ret2.depth == 0){
+                ss << ret2.result_number;
+            }
+            else{
+                ss << "%" << ret2.result_id;
+            }
+            ss << std::endl;
+            return ret;
+        }
+    }
 };
 
 /*
@@ -52,35 +187,36 @@ public:
             ret = primaryexp->Dump2String(ss);
         }
         else if(rule == 2){
-            ret = unaryexp->Dump2String(ss);
-            if(unaryop == "+"){
+            ast_ret_t ret1 = unaryexp->Dump2String(ss);
+            switch (unaryop[0])
+            {
+            case '+':
                 /* do nothing */
+                return ret1;
+                break;
+            case '-':
+                ss << "\t%" << result_id << " = sub 0, ";
+                ret.result_number = -ret1.result_number;
+                break;
+            case '!':
+                ss << "\t%" << result_id << " = eq 0, ";
+                ret.result_number = !ret1.result_number;
+                break;
+            default:
+                assert(false);
+                break;
             }
-            else if(unaryop == "-"){
-                ss << "\t%" << var_id << " = sub 0, ";
-                if(ret.depth == 0){
-                    ss << ret.number << std::endl;
-                }
-                else{
-                    ss << "%" << var_id - 1 << std::endl;
-                }
-                var_id++;
-                ret.depth++;
-            }
-            else if(unaryop == "!"){
-                ss << "\t%" << var_id << " = eq 0, ";
-                if(ret.depth == 0){
-                    ss << ret.number << std::endl;
-                }
-                else{
-                    ss << "%" << var_id - 1 << std::endl;
-                }
-                var_id++;
-                ret.depth++;
+
+            if(ret1.depth == 0){
+                ss << ret1.result_number;
             }
             else{
-                assert(false);
+                ss << "%" << ret1.result_id;
             }
+            ss << std::endl;
+
+            ret.result_id = result_id++;
+            ret.depth = ret.depth + 1;
         }
         return ret;
     }
@@ -115,27 +251,26 @@ public:
             ret = exp->Dump2String(ss);
         }
         else if(rule == 2){
-            // ss << number;
-            ret.number = number;
+            ret.result_number = number;
             ret.depth = 0;
         }
         return ret;
     }
 };
 
-/* Exp         ::= UnaryExp; */
+/* Exp         ::= AddExp; */
 class ExpAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> unaryexp;
+    std::unique_ptr<BaseAST> addexp;
 
     void Dump() const override {
         std::cout << "ExpAST { ";
-        unaryexp->Dump();
+        addexp->Dump();
         std::cout << " }";
     }
 
     ast_ret_t Dump2String(std::stringstream &ss) const override {
-        return unaryexp->Dump2String(ss);
+        return addexp->Dump2String(ss);
     }
 };
 
@@ -154,10 +289,10 @@ public:
         ast_ret_t ret = exp->Dump2String(ss);
 
         if(ret.depth == 0){
-            ss << "\tret " << ret.number << std::endl;
+            ss << "\tret " << ret.result_number << std::endl;
         }
         else{
-            ss << "\tret %" << ret.depth - 1 << std::endl;
+            ss << "\tret %" << ret.result_id << std::endl;
         }
         return ret;
     }

@@ -53,7 +53,7 @@ int main(int argc, const char *argv[]) {
     assert(!ret);
 
     // // dump AST
-    // ast->Dump();
+    ast->Dump();
 
     // dump StringFormatKoopaIR
     stringstream ss;
