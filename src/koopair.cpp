@@ -196,17 +196,17 @@ void Visit(const koopa_raw_binary_t &binary){
         break;
     case KOOPA_RBO_EQ:
         if(reg_lhs == "x0"){
-            std::cout   << "\tsnez\t" << reg_result << ", " << reg_rhs
+            std::cout   << "\tseqz\t" << reg_result << ", " << reg_rhs
                         << std::endl;
         }
         else if(reg_rhs == "x0"){
-            std::cout   << "\tsnez\t" << reg_result << ", " << reg_lhs
+            std::cout   << "\tseqz\t" << reg_result << ", " << reg_lhs
                         << std::endl;
         }
         else{
             std::cout   << "\txor\t" << reg_result << ", " << reg_lhs
                         << ", " << reg_rhs << std::endl;
-            std::cout   << "\tsnez\t" << reg_result << ", " << reg_result
+            std::cout   << "\tseqz\t" << reg_result << ", " << reg_result
                         << std::endl;
         }
         break;
