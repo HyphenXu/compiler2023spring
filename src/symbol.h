@@ -16,15 +16,15 @@ public:
         map_string2type = std::map<std::string, std::string>();
     }
 
-    void insert_definition(std::string &s, int val){
+    void insert_definition(const std::string &s, int val){
         map_string2int[s] = val;
     }
 
-    bool bool_exist(std::string &s){
+    bool bool_exist(const std::string &s){
         return (map_string2int.find(s) != map_string2int.end());
     }
 
-    int get_definition(std::string &s){
+    int get_definition(const std::string &s){
         assert(bool_exist(s));
         return map_string2int[s];
     }

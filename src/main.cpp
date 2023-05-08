@@ -5,6 +5,7 @@
 #include <string>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 
 #include "ast.h"
 #include "koopair.h"
@@ -59,7 +60,7 @@ int main(int argc, const char *argv[]) {
     stringstream ss;
     ss.clear();
     ss.str("");
-    stringbuf* old_buffer = cout.rdbuf(ss.rdbuf());
+    streambuf* old_buffer = cout.rdbuf(ss.rdbuf());
     ast->Dump2StringIR(nullptr);
     string string_koopair(ss.str());
     cout.rdbuf(old_buffer);

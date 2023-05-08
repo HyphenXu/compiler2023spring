@@ -397,7 +397,7 @@ public:
         }
         else{
             ((l_val_result_t *)aux)->val =
-                map_func2symbolTable[cur_namespace].get_definition[ident];
+                map_func2symbolTable[cur_namespace].get_definition(ident);
         }
     }
 };
@@ -590,13 +590,13 @@ public:
                 switch (op[0])
                 {
                 case '/':
-                    std::cout << "\t%" << ret.result_id << " = div ";
+                    std::cout << "\t%" << result->result_id << " = div ";
                     break;
                 case '*':
-                    std::cout << "\t%" << ret.result_id << " = mul ";
+                    std::cout << "\t%" << result->result_id << " = mul ";
                     break;
                 case '%':
-                    std::cout << "\t%" << ret.result_id << " = mod ";
+                    std::cout << "\t%" << result->result_id << " = mod ";
                     break;
                 default:
                     assert(false);
