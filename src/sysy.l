@@ -41,6 +41,7 @@ LogicOr         "||"
 
 "int"           { return INT; }
 "return"        { return RETURN; }
+"const"         { return CONST; }
 
 {Identifier}    { yylval.str_val = new string(yytext); return IDENT; }
 
@@ -50,7 +51,7 @@ LogicOr         "||"
 
 {OrderedCompOp}     { yylval.str_val = new string(yytext); return ORDEREDCOMPOP; }
 {UnorderedCompOp}   { yylval.str_val = new string(yytext); return UNORDEREDCOMPOP; }
-{LogicAnd}           { yylval.str_val = new string(yytext); return LOGICAND; }
+{LogicAnd}          { yylval.str_val = new string(yytext); return LOGICAND; }
 {LogicOr}           { yylval.str_val = new string(yytext); return LOGICOR; }
 
 

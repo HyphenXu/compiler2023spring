@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include "ast.h"
+#include <vector>
 
 /* Necessary declarations. */
 int yylex();
@@ -35,20 +36,27 @@ using namespace std;
 }
 
 /* Declare all possible types of the tokens returned by the lexer */
-%token              INT RETURN
-%token  <str_val>   IDENT 
+%token              INT RETURN CONST
+%token  <str_val>   IDENT
 %token  <int_val>   INT_CONST
 %token  <str_val>   ORDEREDCOMPOP UNORDEREDCOMPOP LOGICAND LOGICOR
 
 /* Define the types of non-terminators */
-%type <ast_val> FuncDef FuncType Block Stmt
-%type <ast_val> Exp PrimaryExp UnaryExp MulExp AddExp
+%type <ast_val> Decl
+%type <ast_val> ConstDecl BType ConstDefs ConstDef ConstInitVal
+%type <ast_val> FuncDef FuncType
+%type <ast_val> Block BlockItems BlockItem Stmt
+%type <ast_val> Exp
+%type <ast_val> LVal
+%type <ast_val> PrimaryExp UnaryExp MulExp AddExp
 %type <ast_val> RelExp EqExp LAndExp LOrExp
+%type <ast_val> ConstExp
 %type <int_val> Number
 %type <str_val> UnaryOp
 
 %%
 
+/* Part 1: CompUnit */
 /** The basic semantics here is: after CompUnit is parsed, what shall be
  *  done with the return value of parsing FuncDef, and what shall be
  *  returned to the caller of this parser, with the pre-defined
@@ -63,6 +71,62 @@ CompUnit
     }
     ;
 
+/* Part 2: Decl */
+Decl
+    : ConstDecl {
+        auto ast = new DeclAST();
+        ast->const_decl = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    ;
+
+ConstDecl
+    : CONST BType ConstDefs ';' {
+        auto ast = new ConstDeclAST();
+        ast->b_type = unique_ptr<BaseAST>($2);
+        ast->const_defs = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    };
+
+BType
+    : INT {
+        auto ast = new BTypeAST();
+        ast->type_string = string("int");
+        $$ = ast;
+    }
+    ;
+
+ConstDefs
+    : ConstDefs ',' ConstDef {
+        auto ast = reinterpret_cast<ConstDefsAST *>($1);
+        ast->vec_const_defs.push_back(unique_ptr<BaseAST>($3));
+        $$ = ast;
+    }
+    | ConstDef {
+        auto ast = new ConstDefsAST();
+        ast->vec_const_defs.push_back(unique_ptr<BaseAST>($1));
+        $$ = ast;
+    }
+    ;
+
+ConstDef
+    : IDENT '=' ConstInitVal {
+        auto ast = new ConstDefAST();
+        ast->ident = *unique_ptr<string>($1);
+        ast->const_init_val = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
+
+ConstInitVal
+    : ConstExp {
+        auto ast = new ConstInitValAST();
+        ast->const_exp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    ;
+
+/* Part 3: Func */
 /** Miscs:
  *  Pay attention to the style here:
         - catch a pointer to a string with unique_ptr<string>
@@ -88,10 +152,44 @@ FuncType
     }
     ;
 
+/* Part 4: Block */
 Block
-    : '{' Stmt '}' {
+    : '{' BlockItems '}' {
         auto ast = new BlockAST();
-        ast->stmt = unique_ptr<BaseAST>($2);
+        ast->block_items = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    | '{' '}' {
+        auto ast = new BlockAST();
+        ast->block_items = nullptr;
+        $$ = ast;
+    }
+    ;
+
+BlockItems
+    : BlockItems BlockItem {
+        auto ast = reinterpret_cast<BlockItemsAST *>($1);
+        ast->vec_block_items.push_back(unique_ptr<BaseAST>($2));
+        $$ = ast;
+    }
+    | BlockItem {
+        auto ast = new BlockItemsAST();
+        ast->vec_block_items.push_back(unique_ptr<BaseAST>($1));
+        $$ = ast;
+    }
+    ;
+
+BlockItem
+    : Decl {
+        auto ast = new BlockItemAST();
+        ast->is_stmt = false;
+        ast->item = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | Stmt {
+        auto ast = new BlockItemAST();
+        ast->is_stmt = true;
+        ast->item = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     ;
@@ -104,10 +202,19 @@ Stmt
     }
     ;
 
+/* Part 5: Exp */
 Exp
     : LOrExp {
         auto ast = new ExpAST();
-        ast->lorexp = unique_ptr<BaseAST>($1); 
+        ast->lorexp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    ;
+
+LVal
+    : IDENT {
+        auto ast = new LValAST();
+        ast->ident = *unique_ptr<string>($1);
         $$ = ast;
     }
     ;
@@ -117,6 +224,12 @@ PrimaryExp
         auto ast = new PrimaryExpAST();
         ast->rule = 1;
         ast->exp = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    | LVal {
+        auto ast = new PrimaryExpAST();
+        ast->rule = 3;
+        ast->l_val = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | Number {
@@ -292,6 +405,14 @@ LOrExp
         ast->lorexp = unique_ptr<BaseAST>($1);
         ast->op = *unique_ptr<string>($2);
         ast->landexp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
+
+ConstExp
+    : Exp {
+        auto ast = new ConstExpAST();
+        ast->exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     ;

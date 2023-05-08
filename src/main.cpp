@@ -52,28 +52,28 @@ int main(int argc, const char *argv[]) {
     auto ret = yyparse(ast);
     assert(!ret);
 
-    // // dump AST
+    // DEBUG: dump AST
     ast->Dump();
 
     // dump StringFormatKoopaIR
     stringstream ss;
-    string string_koopair;
     ss.clear();
     ss.str("");
-    ast->Dump2String(ss);
-    string_koopair = ss.str();
+    stringbuf* old_buffer = cout.rdbuf(ss.rdbuf());
+    ast->Dump2StringIR(nullptr);
+    string string_koopair(ss.str());
+    cout.rdbuf(old_buffer);
 
-    
     if(cmode == CMODE_KOOPA){
         FILE *fp_out = fopen(output, "w");
         fprintf(fp_out, "%s", string_koopair.c_str());
         return 0;
     }
-
+    else
     if(cmode == CMODE_RISCV){
         ofstream fout(output);
         streambuf* old_buffer = cout.rdbuf(fout.rdbuf());
-        libkoopa_string2rawprog(string_koopair.c_str());
+        libkoopa_string2rawprog_and_visit(string_koopair.c_str());
         cout.rdbuf(old_buffer);
     }
 

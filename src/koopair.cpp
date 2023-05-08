@@ -6,7 +6,7 @@
 #include <string>
 
 bool operator<(koopa_raw_binary_t a, koopa_raw_binary_t b){
-    return ((uint32_t)a.op == (uint32_t)b.op) ? 
+    return ((uint32_t)a.op == (uint32_t)b.op) ?
             (((uint64_t)a.lhs == (uint64_t)b.lhs) ?
                 ((uint64_t)a.rhs < (uint64_t)b.rhs)
                 : ((uint64_t)a.lhs < (uint64_t)b.lhs))
@@ -26,7 +26,7 @@ void Visit(const koopa_raw_return_t &ret);
 void Visit(const koopa_raw_integer_t &integer);
 void Visit(const koopa_raw_binary_t &binary);
 
-void libkoopa_string2rawprog(const char *str){
+void libkoopa_string2rawprog_and_visit(const char *str){
     koopa_program_t program;
 
     koopa_error_code_t ret = koopa_parse_from_string(str, &program);
@@ -129,7 +129,7 @@ void Visit(const koopa_raw_integer_t &integer){
     // std::cout << "\tli " << "a0, " << integer.value << std::endl;
     std::cout << "\tli\t" << "t" << register_counter++ << ", ";
     std::cout << integer.value << std::endl;
-    
+
 }
 
 void Visit(const koopa_raw_binary_t &binary){
@@ -144,7 +144,7 @@ void Visit(const koopa_raw_binary_t &binary){
             reg_lhs = "x0";
         }
         else{
-            reg_lhs = "t" + std::to_string(register_counter); 
+            reg_lhs = "t" + std::to_string(register_counter);
             Visit(lhs->kind.data.integer);
         }
     }
@@ -157,7 +157,7 @@ void Visit(const koopa_raw_binary_t &binary){
             reg_rhs = "x0";
         }
         else{
-            reg_rhs = "t" + std::to_string(register_counter); 
+            reg_rhs = "t" + std::to_string(register_counter);
             Visit(rhs->kind.data.integer);
         }
     }
@@ -168,7 +168,7 @@ void Visit(const koopa_raw_binary_t &binary){
 
     /*  TODO:
         what if both "x0"?
-        better policy; 
+        better policy;
         check if the value in reg is no longer needed
     */
     // reg_result = ((reg_rhs == "x0") ? reg_lhs : reg_rhs);
@@ -222,13 +222,13 @@ void Visit(const koopa_raw_binary_t &binary){
         std::cout   << "\tslt\t" << reg_result << ", " << reg_lhs << ", "
                     << reg_rhs << std::endl;
         std::cout   << "\txori\t" << reg_result << ", " << reg_result
-                    << ", 1" << std::endl; 
+                    << ", 1" << std::endl;
         break;
     case KOOPA_RBO_LE:
         std::cout   << "\tslt\t" << reg_result << ", " << reg_rhs << ", "
                     << reg_lhs << std::endl;
         std::cout   << "\txori\t" << reg_result << ", " << reg_result
-                    << ", 1" << std::endl; 
+                    << ", 1" << std::endl;
         break;
     case KOOPA_RBO_ADD:
         std::cout   << "\tadd\t" << reg_result << ", "
