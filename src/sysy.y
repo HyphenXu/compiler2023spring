@@ -44,6 +44,7 @@ using namespace std;
 /* Define the types of non-terminators */
 %type <ast_val> Decl
 %type <ast_val> ConstDecl BType ConstDefs ConstDef ConstInitVal
+%type <ast_val> VarDecl VarDefs VarDef InitVal
 %type <ast_val> FuncDef FuncType
 %type <ast_val> Block BlockItems BlockItem Stmt
 %type <ast_val> Exp
@@ -75,7 +76,14 @@ CompUnit
 Decl
     : ConstDecl {
         auto ast = new DeclAST();
-        ast->const_decl = unique_ptr<BaseAST>($1);
+        ast->rule = 1;
+        ast->decl = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | VarDecl {
+        auto ast = new DeclAST();
+        ast->rule = 2;
+        ast->decl = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     ;
@@ -122,6 +130,51 @@ ConstInitVal
     : ConstExp {
         auto ast = new ConstInitValAST();
         ast->const_exp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    ;
+
+VarDecl
+    : BType VarDefs ';' {
+        auto ast = new VarDeclAST();
+        ast->b_type = unique_ptr<BaseAST>($1);
+        ast->var_defs = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    ;
+
+VarDefs
+    : VarDefs ',' VarDef {
+        auto ast = reinterpret_cast<VarDefsAST *>($1);
+        ast->vec_var_defs.push_back(unique_ptr<BaseAST>($3));
+        $$ = ast;
+    }
+    | VarDef {
+        auto ast = new VarDefsAST();
+        ast->vec_var_defs.push_back(unique_ptr<BaseAST>($1));
+        $$ = ast;
+    }
+    ;
+
+VarDef
+    : IDENT {
+        auto ast = new VarDefAST();
+        ast->ident = *unique_ptr<string>($1);
+        ast->init_val = nullptr;
+        $$ = ast;
+    }
+    | IDENT '=' InitVal {
+        auto ast = new VarDefAST();
+        ast->ident = *unique_ptr<string>($1);
+        ast->init_val = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    ;
+
+InitVal
+    : Exp {
+        auto ast = new InitValAST();
+        ast->exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     ;
@@ -195,8 +248,16 @@ BlockItem
     ;
 
 Stmt
-    : RETURN Exp ';' {
+    : LVal '=' Exp ';' {
         auto ast = new StmtAST();
+        ast->is_return = false;
+        ast->l_val = unique_ptr<BaseAST>($1);
+        ast->exp = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | RETURN Exp ';' {
+        auto ast = new StmtAST();
+        ast->is_return = true;
         ast->exp = unique_ptr<BaseAST>($2);
         $$ = ast;
     }

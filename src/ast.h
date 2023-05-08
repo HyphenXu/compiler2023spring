@@ -23,7 +23,10 @@ typedef struct{
 
 typedef struct{
     bool lhs;
+    bool is_var;
     int val;
+    // int result_id;
+    std::string pointer;
 } l_val_result_t;
 
 /* Base AST class */
@@ -39,6 +42,10 @@ class BtypeAST;
 class ConstDefsAST;
 class ConstDefAST;
 class ConstInitValAST;
+class VarDeclAST;
+class VarDefsAST;
+class VarDefAST;
+class InitValAST;
 
 /* Part 3: Func */
 class FuncDefAST;
@@ -92,19 +99,21 @@ public:
 };
 
 /* Part 2: Decl */
-/* Decl          ::= ConstDecl; */
+/* Decl          ::= ConstDecl | VarDecl; */
 class DeclAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> const_decl;
+    int rule;
+    std::unique_ptr<BaseAST> decl;
 
     void Dump() const override {
         std::cout << "DeclAST { ";
-        const_decl->Dump();
+        std::cout << "rule: " << rule << ", ";
+        decl->Dump();
         std::cout << " }";
     }
 
     void Dump2StringIR(void *aux) const override {
-        const_decl->Dump2StringIR(nullptr);
+        decl->Dump2StringIR(nullptr);
     }
 };
 
@@ -190,15 +199,14 @@ public:
         assert((*string_b_type) == "int");
 
         std::string cur_namespace = stack_namespace.top();
-        assert(!map_func2symbolTable[cur_namespace].bool_exist(ident));
+        assert(!map_func2symbolTable[cur_namespace].bool_symbol_exist(ident));
 
         exp_result_t const_exp_result;
         const_init_val->Dump2StringIR(&const_exp_result);
         assert(const_exp_result.depth == 0);
         int val = const_exp_result.result_number;
 
-        map_func2symbolTable[cur_namespace].insert_definition(ident, val);
-        /* TODO: insert type */
+        map_func2symbolTable[cur_namespace].insert_const_definition_int(ident, val);
     }
 };
 
@@ -215,6 +223,137 @@ public:
 
     void Dump2StringIR(void *aux) const override {
         const_exp->Dump2StringIR(aux);
+    }
+};
+
+/* VarDecl       ::= BType VarDef {"," VarDef} ";"; */
+class VarDeclAST : public BaseAST {
+public:
+    std::unique_ptr<BaseAST> b_type;
+    std::unique_ptr<BaseAST> var_defs;
+
+    void Dump() const override {
+        std::cout << "VarDeclAST { ";
+        b_type->Dump();
+        var_defs->Dump();
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        std::string string_b_type;
+        b_type->Dump2StringIR(&string_b_type);
+        /* TODO: what if other type? */
+        assert(string_b_type == "int");
+
+        var_defs->Dump2StringIR(&string_b_type);
+    }
+};
+
+class VarDefsAST : public BaseAST {
+public:
+    std::vector<std::unique_ptr<BaseAST> > vec_var_defs;
+
+    void Dump() const override {
+        std::cout << "VarDefsAST { ";
+        auto ii = vec_var_defs.begin();
+        auto ie = vec_var_defs.end();
+        for(; ii != ie; ++ii){
+            (*ii)->Dump();
+        }
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        auto ii = vec_var_defs.begin();
+        auto ie = vec_var_defs.end();
+        for(; ii != ie; ++ii){
+            (*ii)->Dump2StringIR(aux);
+        }
+    }
+};
+
+/* VarDef        ::= IDENT | IDENT "=" InitVal; */
+class VarDefAST : public BaseAST {
+public:
+    std::string ident;
+    std::unique_ptr<BaseAST> init_val;
+
+    void Dump() const override {
+        std::cout << "VarDefAST { ";
+        std::cout << ident;
+        if(init_val != nullptr){
+            std::cout << " = ";
+            init_val->Dump();
+        }
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        std::string *string_b_type = (std::string *)aux;
+        /* TODO: what if other type */
+        assert((*string_b_type) == "int");
+        std::string string_koopa_type = "i32";
+
+        if(init_val == nullptr){
+            std::string cur_namespace = stack_namespace.top();
+            assert(!map_func2symbolTable[cur_namespace].bool_symbol_exist(ident));
+
+            map_func2symbolTable[cur_namespace].insert_var_definition_int(ident);
+
+            std::cout << "\t"
+                << map_func2symbolTable[cur_namespace].get_var_pointer_int(ident)
+                << " = alloc "
+                << string_koopa_type
+                << std::endl;
+        }
+        else{
+            exp_result_t init_val_result;
+            init_val->Dump2StringIR(&init_val_result);
+
+            std::string string_value_to_be_stored;
+            if(init_val_result.depth == 0){
+                /* the value is in init_val_result.result_number */
+                string_value_to_be_stored = std::to_string(init_val_result.result_number);
+            }
+            else{
+                /* the value is in %init_val_result.result_id*/
+                string_value_to_be_stored = "%" + std::to_string(init_val_result.result_id);
+            }
+
+            std::string cur_namespace = stack_namespace.top();
+            assert(!map_func2symbolTable[cur_namespace].bool_symbol_exist(ident));
+
+            map_func2symbolTable[cur_namespace].insert_var_definition_int(ident);
+
+            std::string string_var_pointer = map_func2symbolTable[cur_namespace].get_var_pointer_int(ident);
+
+            std::cout << "\t"
+                << string_var_pointer
+                << " = alloc "
+                << string_koopa_type
+                << std::endl;
+
+            std::cout << "\tstore "
+                << string_value_to_be_stored
+                << ", " << string_var_pointer
+                << std::endl;
+        }
+    }
+};
+
+/* InitVal       ::= Exp; */
+class InitValAST : public BaseAST {
+public:
+    std::unique_ptr<BaseAST> exp;
+
+    void Dump() const override {
+        std::cout << "InitValAST { ";
+        exp->Dump();
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        exp->Dump2StringIR(aux);
     }
 };
 
@@ -338,27 +477,56 @@ public:
     }
 };
 
-/* Stmt      ::= "return" Exp ";"; */
+/*
+    Stmt          ::= LVal "=" Exp ";"
+                    | "return" Exp ";";
+*/
 class StmtAST : public BaseAST {
 public:
+    bool is_return;
+    std::unique_ptr<BaseAST> l_val;
     std::unique_ptr<BaseAST> exp;
 
     void Dump() const override {
         std::cout << "StmtAST { ";
-        std::cout << "return ";
-        exp->Dump();
-        std::cout << " }";
+        if(is_return){
+            std::cout << "return ";
+            exp->Dump();
+        }
+        else{
+            l_val->Dump();
+            std::cout << " = ";
+            exp->Dump();
+        }
+        std::cout << "; }";
     }
 
     void Dump2StringIR(void *aux) const override {
         exp_result_t exp_result;
         exp->Dump2StringIR(&exp_result);
 
-        if(exp_result.depth == 0){
-            std::cout << "\tret " << exp_result.result_number << std::endl;
+        if(is_return){
+            if(exp_result.depth == 0){
+                std::cout << "\tret " << exp_result.result_number << std::endl;
+            }
+            else{
+                std::cout << "\tret %" << exp_result.result_id << std::endl;
+            }
         }
         else{
-            std::cout << "\tret %" << exp_result.result_id << std::endl;
+            l_val_result_t l_val_result;
+            l_val_result.lhs = true;
+            l_val->Dump2StringIR(&l_val_result);
+
+            assert(l_val_result.is_var);
+            if(exp_result.depth == 0){
+                std::cout << "\tstore " << exp_result.result_number
+                        << ", " << l_val_result.pointer << std::endl;
+            }
+            else{
+                std::cout << "\tstore %" << exp_result.result_id
+                        << ", " << l_val_result.pointer << std::endl;
+            }
         }
     }
 };
@@ -393,11 +561,26 @@ public:
         std::string cur_namespace = stack_namespace.top();
 
         if(((l_val_result_t *)aux)->lhs){
-            /* TODO */
+            assert(map_func2symbolTable[cur_namespace].bool_symbol_is_var(ident));
+            ((l_val_result_t *)aux)->is_var = true;
+            ((l_val_result_t *)aux)->pointer =
+                map_func2symbolTable[cur_namespace].get_var_pointer_int(ident);
         }
         else{
-            ((l_val_result_t *)aux)->val =
-                map_func2symbolTable[cur_namespace].get_definition(ident);
+            bool is_var = map_func2symbolTable[cur_namespace].bool_symbol_is_var(ident);
+            ((l_val_result_t *)aux)->is_var = is_var;
+            if(is_var){
+                ((l_val_result_t *)aux)->pointer =
+                    map_func2symbolTable[cur_namespace].get_var_pointer_int(ident);
+
+                std::cout << "\t%" << result_id++ << " = load "
+                        << ((l_val_result_t *)aux)->pointer
+                        << std::endl;
+            }
+            else{
+                ((l_val_result_t *)aux)->val =
+                    map_func2symbolTable[cur_namespace].get_const_definition_int(ident);
+            }
         }
     }
 };
@@ -442,8 +625,15 @@ public:
             l_val_result.lhs = false;
             l_val->Dump2StringIR(&l_val_result);
 
-            ((exp_result_t *)aux)->depth = 0;
-            ((exp_result_t *)aux)->result_number = l_val_result.val;
+            if(l_val_result.is_var){
+                ((exp_result_t *)aux)->depth = 1;
+                ((exp_result_t *)aux)->result_id = result_id - 1;
+            }
+            else{
+
+                ((exp_result_t *)aux)->depth = 0;
+                ((exp_result_t *)aux)->result_number = l_val_result.val;
+            }
         }
     }
 };

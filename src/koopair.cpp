@@ -16,6 +16,8 @@ bool operator<(koopa_raw_binary_t a, koopa_raw_binary_t b){
 static int register_counter = 0;
 static std::map<koopa_raw_binary_t, std::string> binary2reg;
 
+void Visit(const koopa_raw_program_t &program);
+
 void Visit(const koopa_raw_slice_t &slice);
 
 void Visit(const koopa_raw_function_t &func);
