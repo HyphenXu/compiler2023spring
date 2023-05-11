@@ -17,6 +17,9 @@ int yylex();
 void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 
 using namespace std;
+
+static int block_id = 0;
+
 %}
 
 /** Define extra parameter for parser and error handler.
@@ -210,11 +213,13 @@ Block
     : '{' BlockItems '}' {
         auto ast = new BlockAST();
         ast->block_items = unique_ptr<BaseAST>($2);
+        ast->id = block_id++;
         $$ = ast;
     }
     | '{' '}' {
         auto ast = new BlockAST();
         ast->block_items = nullptr;
+        ast->id = block_id++;
         $$ = ast;
     }
     ;
@@ -250,15 +255,39 @@ BlockItem
 Stmt
     : LVal '=' Exp ';' {
         auto ast = new StmtAST();
-        ast->is_return = false;
+        ast->rule = 1;
         ast->l_val = unique_ptr<BaseAST>($1);
         ast->exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
+    | Exp ';' {
+        auto ast = new StmtAST();
+        ast->rule = 2;
+        ast->exp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | ';' {
+        auto ast = new StmtAST();
+        ast->rule = 2;
+        ast->exp = nullptr;
+        $$ = ast;
+    }
+    | Block {
+        auto ast = new StmtAST();
+        ast->rule = 3;
+        ast->block = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
     | RETURN Exp ';' {
         auto ast = new StmtAST();
-        ast->is_return = true;
+        ast->rule = 4;
         ast->exp = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    | RETURN ';' {
+        auto ast = new StmtAST();
+        ast->rule = 4;
+        ast->exp = nullptr;
         $$ = ast;
     }
     ;
