@@ -35,6 +35,8 @@ void Visit(const koopa_raw_integer_t &integer);
 void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_store_t &store);
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value);
+void Visit(const koopa_raw_branch_t &branch);
+void Visit(const koopa_raw_jump_t &jump);
 
 void libkoopa_string2rawprog_and_visit(const char *str){
     koopa_program_t program;
@@ -46,7 +48,9 @@ void libkoopa_string2rawprog_and_visit(const char *str){
     koopa_raw_program_t raw = koopa_build_raw_program(builder, program);
     koopa_delete_program(program);
 
+    std::cerr << "DEBUG: RISCV generation started." << std::endl;
     Visit(raw);
+    std::cerr << "DEBUG: RISCV generation ended." << std::endl;
 
     koopa_delete_raw_program_builder(builder);
 }
@@ -150,9 +154,15 @@ void Visit(const koopa_raw_value_t &value){
     case KOOPA_RVT_LOAD:
         Visit(kind.data.load, value);
         break;
+    case KOOPA_RVT_BRANCH:
+        Visit(kind.data.branch);
+        break;
+    case KOOPA_RVT_JUMP:
+        Visit(kind.data.jump);
+        break;
     default:
         /*TODO: Other raw value types*/
-        std::cout << kind.tag << std::endl;
+        std::cerr << kind.tag << std::endl;
         assert(false);
         break;
     }
@@ -204,9 +214,9 @@ void Visit(const koopa_raw_integer_t &integer){
 }
 
 void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
-    koopa_raw_binary_op_t op = binary.op;
-    koopa_raw_value_t lhs = binary.lhs;
-    koopa_raw_value_t rhs = binary.rhs;
+    const koopa_raw_binary_op_t &op = binary.op;
+    const koopa_raw_value_t &lhs = binary.lhs;
+    const koopa_raw_value_t &rhs = binary.rhs;
     std::string reg_lhs, reg_rhs;
     std::string reg_result;
 
@@ -351,6 +361,7 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
         break;
     }
 
+    // assert((*frame).find(value) != (*frame).end());
     int offset_result = (*frame)[value].offset;
     assert(offset_result >= 0);
     if(offset_result > STACK_IMM_POS_MAX){
@@ -384,6 +395,7 @@ void Visit(const koopa_raw_store_t &store){
         }
     }
 
+    // assert((*frame).find(store.dest) != (*frame).end());
     int offset_dest = (*frame)[store.dest].offset;
     assert(offset_dest >= 0);
     if(offset_dest > STACK_IMM_POS_MAX){
@@ -397,7 +409,8 @@ void Visit(const koopa_raw_store_t &store){
 }
 
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
-    // Visit(load.src);
+    // assert((*frame).find(load.src) != (*frame).end());
+    // assert((*frame).find(value) != (*frame).end());
     int offset_src = (*frame)[load.src].offset;
     int offset_dest = (*frame)[value].offset;
 
@@ -420,4 +433,33 @@ void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
         std::cout << "\tsw\t" << "t" << register_counter << ", ";
         std::cout << offset_dest << "(sp)" << std::endl;
     }
+}
+
+void Visit(const koopa_raw_branch_t &branch){
+    if(branch.cond->kind.tag == KOOPA_RVT_INTEGER){
+        std::cout << "\tli\t" << "t" << register_counter << ", ";
+        std::cout << branch.cond->kind.data.integer.value << std::endl;
+        std::cout << "\tbnez\t" << "t" << register_counter << ", ";
+        std::cout << branch.true_bb->name + 1 << std::endl;
+    }
+    else{
+        assert((*frame).find(branch.cond) != (*frame).end());
+        int offset_cond = (*frame)[branch.cond].offset;
+        if(offset_cond > STACK_IMM_POS_MAX){
+            /* TODO */
+            assert(false);
+        }
+        else{
+            std::cout << "\tlw\t" << "t" << register_counter << ", ";
+            std::cout << offset_cond << "(sp)" << std::endl;
+        }
+        std::cout << "\tbnez\t" << "t" << register_counter << ", ";
+        std::cout << branch.true_bb->name + 1 << std::endl;
+    }
+
+    std::cout << "\tj\t" << branch.false_bb->name + 1 << std::endl;
+}
+
+void Visit(const koopa_raw_jump_t &jump){
+    std::cout << "\tj\t" << jump.target->name + 1 << std::endl;
 }

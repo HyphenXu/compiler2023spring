@@ -31,6 +31,11 @@ typedef struct{
     std::string pointer;
 } l_val_result_t;
 
+typedef struct{
+    // bool is_end_with_ret;
+    bool is_end_with_if;
+} stmt_result_t;
+
 /* Base AST class */
 class BaseAST;
 
@@ -57,7 +62,9 @@ class FuncTypeAST;
 class BlockAST;
 class BlockItemsAST;
 class BlockItemAST;
+class GeneralStmtAST;
 class StmtAST;
+class OpenStmtAST;
 
 /* Part 5: Exp */
 class ExpAST;
@@ -298,7 +305,7 @@ public:
 
         if(init_val == nullptr){
             int cur_namespace = stack_namespace.top();
-            assert(!map_blockID2symbolTable[cur_namespace].bool_symbol_exist(ident));
+            assert(!map_blockID2symbolTable[cur_namespace].bool_symbol_exist_local(ident));
 
             map_blockID2symbolTable[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
 
@@ -389,6 +396,7 @@ public:
         std::cout << "%" << "entry" << ":" << std::endl;
         /* TODO: may pass some func related info to its block? */
         block->Dump2StringIR(nullptr);
+        std::cout << "\tret" << std::endl;
         std::cout << "}" << std::endl;
         // stack_namespace.pop();
         // map_blockID2symbolTable[ident].clear_table();
@@ -429,6 +437,7 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
+        stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
         map_blockID2symbolTable[id] = SymbolTable();
 
         /* TODO: modify here after introducing global var */
@@ -441,7 +450,13 @@ public:
         stack_namespace.push(id);
 
         if(block_items != nullptr){
-            block_items->Dump2StringIR(nullptr);
+            block_items->Dump2StringIR(aux);
+        }
+        else{
+            if(last_stmt_result != nullptr){
+                // last_stmt_result->is_end_with_ret = false;
+                last_stmt_result->is_end_with_if = false;
+            }
         }
 
         stack_namespace.pop();
@@ -465,15 +480,21 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
+        stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
+        if(last_stmt_result != nullptr){
+            // last_stmt_result->is_end_with_ret = false;
+            last_stmt_result->is_end_with_if = false;
+        }
+
         auto ii = vec_block_items.begin();
         auto ie = vec_block_items.end();
         for(; ii != ie; ++ii){
-            (*ii)->Dump2StringIR(nullptr);
+            (*ii)->Dump2StringIR(aux);
         }
     }
 };
 
-/* BlockItem     ::= Decl | Stmt; */
+/* BlockItem     ::= Decl | GeneralStmt; */
 class BlockItemAST : public BaseAST {
 public:
     bool is_stmt;
@@ -487,22 +508,59 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        item->Dump2StringIR(nullptr);
+        // stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
+        if(is_stmt){
+            item->Dump2StringIR(aux);
+        }
+        else{
+            item->Dump2StringIR(nullptr);
+            // stmt_result_t *stmt_result = (stmt_result_t *)aux;
+            // if(stmt_result != nullptr){
+            //     stmt_result->is_end_with_ret = false;
+            //     stmt_result->is_end_with_if = false;
+            // }
+        }
     }
 };
+
+/* GeneralStmt     ::= Stmt | OpenStmt; */
+class GeneralStmtAST : public BaseAST {
+public:
+    bool is_open;
+    std::unique_ptr<BaseAST> stmt;
+
+    void Dump() const override {
+        std::cout << "GeneralStmtAST { ";
+        std::cout << "is_open: " << is_open << ", ";
+        stmt->Dump();
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        // stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
+        stmt->Dump2StringIR(aux);
+    }
+};
+
 
 /*
     Stmt ::= LVal "=" Exp ";"
         | [Exp] ";"
         | Block
         | "return" [Exp] ";";
+        | IF '(' Exp ')' Stmt ELSE Stmt
 */
 class StmtAST : public BaseAST {
 public:
     int rule;
+    int if_stmt_id;
+    int ret_id;
     std::unique_ptr<BaseAST> l_val;
     std::unique_ptr<BaseAST> exp;
     std::unique_ptr<BaseAST> block;
+    std::unique_ptr<BaseAST> stmt_true;
+    std::unique_ptr<BaseAST> stmt_false;
+
 
     void Dump() const override {
         std::cout << "StmtAST { ";
@@ -511,11 +569,13 @@ public:
             l_val->Dump();
             std::cout << " = ";
             exp->Dump();
+            std::cout << "; }";
         }
         else if(rule == 2){
             if(exp != nullptr){
                 exp->Dump();
             }
+            std::cout << "; }";
         }
         else if(rule == 3){
             block->Dump();
@@ -525,16 +585,28 @@ public:
             if(exp != nullptr){
                 exp->Dump();
             }
+            std::cout << "; }";
+        }
+        else if(rule == 5){
+            std::cout << "if ( ";
+            exp->Dump();
+            std::cout << ") ";
+            stmt_true->Dump();
+            std::cout << " else ";
+            stmt_false->Dump();
+            std::cout << " }";
         }
         else{
             assert(false);
         }
-
-        std::cout << "; }";
     }
 
     void Dump2StringIR(void *aux) const override {
-
+        stmt_result_t *stmt_result = (stmt_result_t *)aux;
+        if(stmt_result != nullptr){
+            // stmt_result->is_end_with_ret = false;
+            stmt_result->is_end_with_if = false;
+        }
 
         if(rule == 1){
             exp_result_t exp_result;
@@ -561,10 +633,15 @@ public:
             }
         }
         else if(rule == 3){
-            block->Dump2StringIR(nullptr);
+            block->Dump2StringIR(aux);
         }
         else if(rule == 4){
+            // if(stmt_result != nullptr){
+            //     stmt_result->is_end_with_ret = true;
+            // }
             /* TODO: what if no return value */
+            std::cout << "\tjump %ret_" << ret_id << std::endl;
+            std::cout << "%ret_" << ret_id << ":" << std::endl;
             if(exp == nullptr){
                 std::cout << "\tret" << std::endl;
             }
@@ -579,9 +656,133 @@ public:
                     std::cout << "\tret %" << exp_result.result_id << std::endl;
                 }
             }
+            std::cout << "%after_ret_" << ret_id << ":" << std::endl;
+        }
+        else if(rule == 5){
+            stmt_result_t stmt_result_1, stmt_result_2;
+            exp_result_t exp_result;
+            exp->Dump2StringIR(&exp_result);
+            if(exp_result.depth != 0){
+                std::cout << "\tbr %" << exp_result.result_id << ", ";
+            }
+            else{
+                std::cout << "\tbr " << exp_result.result_number << ", ";
+            }
+            std::cout << "%then_" << if_stmt_id << ", ";
+            std::cout << "%else_" << if_stmt_id << std::endl;
+
+            std::cout << "%then_" << if_stmt_id << ":" << std::endl;
+            stmt_true->Dump2StringIR(&stmt_result_1);
+            // if(!stmt_result_1.is_end_with_ret){
+                std::cout << "\tjump %end_" << if_stmt_id << std::endl;
+            // }
+
+            std::cout << "%else_" << if_stmt_id << ":" << std::endl;
+            stmt_false->Dump2StringIR(&stmt_result_2);
+            // if(!stmt_result_2.is_end_with_ret || stmt_result_2.is_end_with_if){
+                std::cout << "\tjump %end_" << if_stmt_id << std::endl;
+            // }
+
+            // if(!(stmt_result_1.is_end_with_ret && stmt_result_2.is_end_with_ret)){
+                std::cout << "%end_" << if_stmt_id << ":" << std::endl;
+            // }
+            if(stmt_result != nullptr){
+                // stmt_result->is_end_with_ret = stmt_result_1.is_end_with_ret
+                //                             && stmt_result_2.is_end_with_ret;
+                stmt_result->is_end_with_if = true;
+            }
+
         }
         else{
             assert(false);
+        }
+    }
+};
+
+/*
+    OpenStmt    ::= IF '(' Exp ')' GeneralStmt
+                | IF '(' Exp ')' Stmt ELSE OpenStmt
+*/
+class OpenStmtAST : public BaseAST {
+public:
+    bool is_with_else;
+    int if_stmt_id;
+    std::unique_ptr<BaseAST> exp;
+    std::unique_ptr<BaseAST> stmt_true;
+    std::unique_ptr<BaseAST> stmt_false;
+
+    void Dump() const override {
+        std::cout << "OpenStmtAST { ";
+        std::cout << "if ( ";
+        exp->Dump();
+        std::cout << ") ";
+        std::cout << "is_with_else: " << is_with_else << ", ";
+        stmt_true->Dump();
+        if(is_with_else){
+            std::cout << " else ";
+            stmt_false->Dump();
+        }
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        stmt_result_t *stmt_result = (stmt_result_t *)aux;
+        if(stmt_result != nullptr){
+            // stmt_result->is_end_with_ret = false;
+            stmt_result->is_end_with_if = true;
+        }
+
+        stmt_result_t stmt_result_1, stmt_result_2;
+        exp_result_t exp_result;
+        exp->Dump2StringIR(&exp_result);
+        if(exp_result.depth != 0){
+            std::cout << "\tbr %" << exp_result.result_id << ", ";
+        }
+        else{
+            std::cout << "\tbr " << exp_result.result_number << ", ";
+        }
+        std::cout << "%then_" << if_stmt_id << ", ";
+        if(is_with_else){
+            std::cout << "%else_" << if_stmt_id << std::endl;
+        }
+        else{
+            std::cout << "%end_" << if_stmt_id << std::endl;
+        }
+
+        std::cout << "%then_" << if_stmt_id << ":" << std::endl;
+        stmt_true->Dump2StringIR(&stmt_result_1);
+
+        if(is_with_else){
+            // if(!stmt_result_1.is_end_with_ret){
+                std::cout << "\tjump %end_" << if_stmt_id << std::endl;
+            // }
+
+            std::cout << "%else_" << if_stmt_id << ":" << std::endl;
+            stmt_false->Dump2StringIR(&stmt_result_2);
+            // if(!stmt_result_2.is_end_with_ret || stmt_result_2.is_end_with_if){
+                std::cout << "\tjump %end_" << if_stmt_id << std::endl;
+            // }
+
+            // if(!(stmt_result_1.is_end_with_ret && stmt_result_2.is_end_with_ret)){
+                std::cout << "%end_" << if_stmt_id << ":" << std::endl;
+            // }
+
+            // if(stmt_result != nullptr){
+            //     stmt_result->is_end_with_ret = stmt_result_1.is_end_with_ret
+            //                                 && stmt_result_2.is_end_with_ret;
+            // }
+        }
+        else{
+            // if(!stmt_result_1.is_end_with_ret || stmt_result_1.is_end_with_if){
+                std::cout << "\tjump %end_" << if_stmt_id << std::endl;
+            // }
+
+            // if(!stmt_result_1.is_end_with_ret){
+            std::cout << "%end_" << if_stmt_id << ":" << std::endl;
+            // }
+            // if(stmt_result != nullptr){
+            //     stmt_result->is_end_with_ret = stmt_result_1.is_end_with_ret;
+            // }
         }
     }
 };
@@ -1119,6 +1320,7 @@ public:
 class LAndExpAST : public BaseAST {
 public:
     int rule;
+    int id;
     std::unique_ptr<BaseAST> eqexp;
     std::unique_ptr<BaseAST> landexp;
     std::string op;
@@ -1146,23 +1348,46 @@ public:
             exp_result_t *result = (exp_result_t *)aux;
 
             landexp->Dump2StringIR(&result1);
-            /* TODO: short-curcuit logic */
-            eqexp->Dump2StringIR(&result2);
 
-            if(result1.depth == 0 && result2.depth == 0){
-                result->depth = 0;
-                result->result_number = result1.result_number
-                                        && result2.result_number;
-            }
-            else{
-                std::cout << "\t%" << result_id++ << " = ne 0, ";
-                if(result1.depth == 0){
-                    std::cout << result1.result_number;
+            /* short-circuit logic */
+            if(result1.depth == 0){
+                if(result1.result_number == 0){
+                    result->depth = 0;
+                    result->result_number = 0;
                 }
                 else{
-                    std::cout << "%" << result1.result_id;
+                    eqexp->Dump2StringIR(&result2);
+                    if(result2.depth == 0){
+                        result->depth = 0;
+                        result->result_number = result1.result_number
+                                            && result2.result_number;
+                    }
+                    else{
+                        result->depth = result2.depth + 1;
+                        result->result_id = result_id++;
+                        std::cout << "\t%" << result->result_id;
+                        std::cout << " = ne 0, %" << result2.result_id;
+                        std::cout << std::endl;
+                    }
                 }
+            }
+            else{
+                std::cout << "\t%tmp_l_and_exp_" << id;
+                std::cout << " = alloc i32" << std::endl;
+
+                std::cout << "\tstore 0, %tmp_l_and_exp_" << id;
                 std::cout << std::endl;
+
+                std::cout << "\tbr %" << result1.result_id << ", ";
+                std::cout << "%then_l_and_exp_" << id << ", ";
+                std::cout << "%end_l_and_exp_" << id << std::endl;
+
+                std::cout << "%then_l_and_exp_" << id << ":" << std::endl;
+
+                eqexp->Dump2StringIR(&result2);
+
+                std::cout << "\t%" << result_id++ << " = ne 0, ";
+                std::cout << "%" << result1.result_id << std::endl;
 
                 std::cout << "\t%" << result_id++ << " = ne 0, ";
                 if(result2.depth == 0){
@@ -1173,6 +1398,10 @@ public:
                 }
                 std::cout << std::endl;
 
+                /*
+                    TODO: the semantics of `depth` is problematic here.
+                    better change from int to bool
+                */
                 result->depth = std::max(result1.depth, result2.depth) + 1;
                 result->result_id = result_id++;
 
@@ -1180,7 +1409,53 @@ public:
                             << result->result_id - 1 << ", %"
                             << result->result_id - 2
                             << std::endl;
+
+                std::cout << "\t store %" << result->result_id;
+                std::cout << ", %tmp_l_and_exp_" << id << std::endl;
+
+                std::cout << "\tjump %end_l_and_exp_" << id << std::endl;
+
+                std::cout << "%end_l_and_exp_" << id << ":" << std::endl;
+
+                result->result_id = result_id++;
+                std::cout << "\t %" << result->result_id << " = load ";
+                std::cout << "%tmp_l_and_exp_" << id << std::endl;
             }
+
+            // eqexp->Dump2StringIR(&result2);
+
+            // if(result1.depth == 0 && result2.depth == 0){
+            //     result->depth = 0;
+            //     result->result_number = result1.result_number
+            //                             && result2.result_number;
+            // }
+            // else{
+            //     std::cout << "\t%" << result_id++ << " = ne 0, ";
+            //     if(result1.depth == 0){
+            //         std::cout << result1.result_number;
+            //     }
+            //     else{
+            //         std::cout << "%" << result1.result_id;
+            //     }
+            //     std::cout << std::endl;
+
+            //     std::cout << "\t%" << result_id++ << " = ne 0, ";
+            //     if(result2.depth == 0){
+            //         std::cout << result2.result_number;
+            //     }
+            //     else{
+            //         std::cout << "%" << result2.result_id;
+            //     }
+            //     std::cout << std::endl;
+
+            //     result->depth = std::max(result1.depth, result2.depth) + 1;
+            //     result->result_id = result_id++;
+
+            //     std::cout   << "\t%" << result->result_id << " = and %"
+            //                 << result->result_id - 1 << ", %"
+            //                 << result->result_id - 2
+            //                 << std::endl;
+            // }
         }
     }
 };
@@ -1189,6 +1464,7 @@ public:
 class LOrExpAST : public BaseAST {
 public:
     int rule;
+    int id;
     std::unique_ptr<BaseAST> landexp;
     std::unique_ptr<BaseAST> lorexp;
     std::string op;
@@ -1216,26 +1492,46 @@ public:
             exp_result_t *result = (exp_result_t *)aux;
 
             lorexp->Dump2StringIR(&result1);
-            /* TODO: short-circuit logic */
-            landexp->Dump2StringIR(&result2);
 
-            if(result1.depth == 0 && result2.depth == 0){
-                result->depth = 0;
-                result->result_number = result1.result_number
-                                        || result2.result_number;
-            }
-            else{
-                result->depth = std::max(result1.depth, result2.depth) + 1;
-                result->result_id = result_id++;
-
-                std::cout << "\t%" << result->result_id << " = or ";
-                if(result1.depth == 0){
-                    std::cout << result1.result_number;
+            /* short-circuit logic */
+            if(result1.depth == 0){
+                if(result1.result_number != 0){
+                    result->depth = 0;
+                    result->result_number = 1;
                 }
                 else{
-                    std::cout << "%" << result1.result_id;
+                    landexp->Dump2StringIR(&result2);
+                    if(result2.depth == 0){
+                        result->depth = 0;
+                        result->result_number = result1.result_number
+                                            || result2.result_number;
+                    }
+                    else{
+                        result->depth = result2.depth + 1;
+                        result->result_id = result_id++;
+                        std::cout << "\t%" << result->result_id;
+                        std::cout << " = ne 0, %" << result2.result_id;
+                        std::cout << std::endl;
+                    }
                 }
-                std::cout << ", ";
+            }
+            else{
+                std::cout << "\t%tmp_l_or_exp_" << id;
+                std::cout << " = alloc i32" << std::endl;
+
+                std::cout << "\tstore 1, %tmp_l_or_exp_" << id;
+                std::cout << std::endl;
+
+                std::cout << "\tbr %" << result1.result_id << ", ";
+                std::cout << "%end_l_or_exp_" << id << ", ";
+                std::cout << "%then_l_or_exp_" << id << std::endl;
+
+                std::cout << "%then_l_or_exp_" << id << ":" << std::endl;
+
+                landexp->Dump2StringIR(&result2);
+
+                std::cout << "\t%" << result_id++ << " = or ";
+                std::cout << "%" << result1.result_id << ", ";
                 if(result2.depth == 0){
                     std::cout << result2.result_number;
                 }
@@ -1244,10 +1540,58 @@ public:
                 }
                 std::cout << std::endl;
 
+                /*
+                    TODO: the semantics of `depth` is problematic here.
+                    better change from int to bool
+                */
+                result->depth = std::max(result1.depth, result2.depth) + 1;
                 result->result_id = result_id++;
                 std::cout << "\t%" << result->result_id << " = ne 0, %";
                 std::cout << result->result_id - 1 << std::endl;
+
+                std::cout << "\tstore %" << result->result_id;
+                std::cout << ", %tmp_l_or_exp_" << id << std::endl;
+
+                std::cout << "\tjump %end_l_or_exp_" << id << std::endl;
+
+                std::cout << "%end_l_or_exp_" << id << ":" << std::endl;
+
+                result->result_id = result_id++;
+                std::cout << "\t%" << result->result_id << " = load ";
+                std::cout << "%tmp_l_or_exp_" << id << std::endl;
             }
+
+            // landexp->Dump2StringIR(&result2);
+
+            // if(result1.depth == 0 && result2.depth == 0){
+            //     result->depth = 0;
+            //     result->result_number = result1.result_number
+            //                             || result2.result_number;
+            // }
+            // else{
+            //     result->depth = std::max(result1.depth, result2.depth) + 1;
+            //     result->result_id = result_id++;
+
+            //     std::cout << "\t%" << result->result_id << " = or ";
+            //     if(result1.depth == 0){
+            //         std::cout << result1.result_number;
+            //     }
+            //     else{
+            //         std::cout << "%" << result1.result_id;
+            //     }
+            //     std::cout << ", ";
+            //     if(result2.depth == 0){
+            //         std::cout << result2.result_number;
+            //     }
+            //     else{
+            //         std::cout << "%" << result2.result_id;
+            //     }
+            //     std::cout << std::endl;
+
+            //     result->result_id = result_id++;
+            //     std::cout << "\t%" << result->result_id << " = ne 0, %";
+            //     std::cout << result->result_id - 1 << std::endl;
+            // }
         }
     }
 };

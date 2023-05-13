@@ -19,6 +19,10 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 using namespace std;
 
 static int block_id = 0;
+static int if_id = 0;
+static int ret_id = 0;
+static int l_or_exp_id = 0;
+static int l_and_exp_id = 0;
 
 %}
 
@@ -39,7 +43,7 @@ static int block_id = 0;
 }
 
 /* Declare all possible types of the tokens returned by the lexer */
-%token              INT RETURN CONST
+%token              INT RETURN CONST IF ELSE
 %token  <str_val>   IDENT
 %token  <int_val>   INT_CONST
 %token  <str_val>   ORDEREDCOMPOP UNORDEREDCOMPOP LOGICAND LOGICOR
@@ -49,7 +53,7 @@ static int block_id = 0;
 %type <ast_val> ConstDecl BType ConstDefs ConstDef ConstInitVal
 %type <ast_val> VarDecl VarDefs VarDef InitVal
 %type <ast_val> FuncDef FuncType
-%type <ast_val> Block BlockItems BlockItem Stmt
+%type <ast_val> Block BlockItems BlockItem GeneralStmt Stmt OpenStmt
 %type <ast_val> Exp
 %type <ast_val> LVal
 %type <ast_val> PrimaryExp UnaryExp MulExp AddExp
@@ -244,10 +248,25 @@ BlockItem
         ast->item = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
-    | Stmt {
+    | GeneralStmt {
         auto ast = new BlockItemAST();
         ast->is_stmt = true;
         ast->item = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    ;
+
+GeneralStmt
+    : Stmt {
+        auto ast = new GeneralStmtAST();
+        ast->is_open = false;
+        ast->stmt = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | OpenStmt {
+        auto ast = new GeneralStmtAST();
+        ast->is_open = false;
+        ast->stmt = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     ;
@@ -281,13 +300,44 @@ Stmt
     | RETURN Exp ';' {
         auto ast = new StmtAST();
         ast->rule = 4;
+        ast->ret_id = ret_id++;
         ast->exp = unique_ptr<BaseAST>($2);
         $$ = ast;
     }
     | RETURN ';' {
         auto ast = new StmtAST();
         ast->rule = 4;
+        ast->ret_id = ret_id++;
         ast->exp = nullptr;
+        $$ = ast;
+    }
+    | IF '(' Exp ')' Stmt ELSE Stmt {
+        auto ast = new StmtAST();
+        ast->rule = 5;
+        ast->if_stmt_id = if_id++;
+        ast->exp = unique_ptr<BaseAST>($3);
+        ast->stmt_true = unique_ptr<BaseAST>($5);
+        ast->stmt_false = unique_ptr<BaseAST>($7);
+        $$ = ast;
+    }
+    ;
+
+OpenStmt
+    : IF '(' Exp ')' GeneralStmt {
+        auto ast = new OpenStmtAST();
+        ast->if_stmt_id = if_id++;
+        ast->is_with_else = false;
+        ast->exp = unique_ptr<BaseAST>($3);
+        ast->stmt_true = unique_ptr<BaseAST>($5);
+        $$ = ast;
+    }
+    | IF '(' Exp ')' Stmt ELSE OpenStmt {
+        auto ast = new OpenStmtAST();
+        ast->if_stmt_id = if_id++;
+        ast->is_with_else = true;
+        ast->exp = unique_ptr<BaseAST>($3);
+        ast->stmt_true = unique_ptr<BaseAST>($5);
+        ast->stmt_false = unique_ptr<BaseAST>($7);
         $$ = ast;
     }
     ;
@@ -469,12 +519,14 @@ LAndExp
     : EqExp {
         auto ast = new LAndExpAST();
         ast->rule = 1;
+        ast->id = l_and_exp_id++;
         ast->eqexp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | LAndExp LOGICAND EqExp {
         auto ast = new LAndExpAST();
         ast->rule = 2;
+        ast->id = l_and_exp_id++;
         ast->landexp = unique_ptr<BaseAST>($1);
         ast->op = *unique_ptr<string>($2);
         ast->eqexp = unique_ptr<BaseAST>($3);
@@ -486,12 +538,14 @@ LOrExp
     : LAndExp {
         auto ast = new LOrExpAST();
         ast->rule = 1;
+        ast->id = l_or_exp_id++;
         ast->landexp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | LOrExp LOGICOR LAndExp {
         auto ast = new LOrExpAST();
         ast->rule = 2;
+        ast->id = l_or_exp_id++;
         ast->lorexp = unique_ptr<BaseAST>($1);
         ast->op = *unique_ptr<string>($2);
         ast->landexp = unique_ptr<BaseAST>($3);
