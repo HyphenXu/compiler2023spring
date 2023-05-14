@@ -32,15 +32,33 @@ typedef struct{
     std::string pointer;
 } l_val_result_t;
 
+// typedef struct{
+//     // bool is_end_with_ret;
+//     bool is_end_with_if;
+// } stmt_result_t;
+
 typedef struct{
-    // bool is_end_with_ret;
-    bool is_end_with_if;
-} stmt_result_t;
+    std::string ident;
+    std::string b_type;
+} func_f_param_result_t;
+
+typedef struct{
+    int count;
+    std::vector<func_f_param_result_t> params;
+} func_f_params_result_t;
+
+typedef struct{
+    int count;
+    std::vector<exp_result_t> params;
+} func_r_params_result_t;
 
 /* Base AST class */
 class BaseAST;
 
+
 /* Part 1: CompUnit */
+class StartSymbolAST;
+class CompUnitsAST;
 class CompUnitAST;
 
 /* Part 2: Decl */
@@ -58,6 +76,8 @@ class InitValAST;
 /* Part 3: Func */
 class FuncDefAST;
 class FuncTypeAST;
+class FuncFParamsAST;
+class FuncFParamAST;
 
 /* Part 4: Block */
 class BlockAST;
@@ -72,6 +92,8 @@ class ExpAST;
 class LValAST;
 class PrimaryExpAST;
 class UnaryExpAST;
+class FuncRParamsAST;
+class FuncRParamAST;
 class MulExpAST;
 class AddExpAST;
 class RelExpAST;
@@ -90,8 +112,54 @@ public:
     virtual void Dump2StringIR(void *aux) const = 0;
 };
 
+/* Part 0: StartSymbol */
+class StartSymbolAST : public BaseAST {
+public:
+    std::unique_ptr<BaseAST> comp_units;
+
+    void Dump() const override{
+        comp_units->Dump();
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        /* Some initialization */
+        stack_while_id = std::stack<int>();
+        stack_namespace = std::stack<int>();
+
+        stack_namespace.push(GLOBAL_NAMESPACE_ID);
+        map_blockID2symbolTable[GLOBAL_NAMESPACE_ID] = SymbolTable();
+        map_blockID2symbolTable[GLOBAL_NAMESPACE_ID].update_parent_block(ROOT_NAMESPACE_ID);
+
+        comp_units->Dump2StringIR(nullptr);
+    }
+};
+
 /* Part 1: CompUnit */
-/* CompUnit  ::= FuncDef; */
+/* CompUnit    ::= [CompUnit] FuncDef; */
+
+class CompUnitsAST: public BaseAST{
+public:
+    std::vector<std::unique_ptr<BaseAST> > vec_comp_units;
+
+    void Dump() const override {
+        std::cout << "CompUnitsAST { ";
+        auto ii = vec_comp_units.begin();
+        auto ie = vec_comp_units.end();
+        for(; ii != ie; ++ii){
+            (*ii)->Dump();
+        }
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        auto ii = vec_comp_units.begin();
+        auto ie = vec_comp_units.end();
+        for(; ii != ie; ++ii){
+            (*ii)->Dump2StringIR(nullptr);
+        }
+    }
+};
+
 class CompUnitAST : public BaseAST {
 public:
     std::unique_ptr<BaseAST> func_def;
@@ -104,9 +172,6 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        /* Some initialization */
-        stack_while_id = std::stack<int>();
-
         func_def->Dump2StringIR(nullptr);
     }
 };
@@ -371,35 +436,58 @@ public:
 };
 
 /* Part 3: Func */
-/* FuncDef   ::= FuncType IDENT "(" ")" Block; */
+/* FuncDef     ::= FuncType IDENT "(" [FuncFParams] ")" Block; */
 class FuncDefAST : public BaseAST {
 public:
     std::unique_ptr<BaseAST> func_type;
     std::string ident;
+    std::unique_ptr<BaseAST> func_f_params;
     std::unique_ptr<BaseAST> block;
 
     void Dump() const override {
         std::cout << "FuncDefAST { ";
         func_type->Dump();
         std::cout << ", " << ident << ", ";
+        if(func_f_params == nullptr){
+            std::cout << "params_null, ";
+        }
+        else{
+            func_f_params->Dump();
+        }
         block->Dump();
         std::cout << " }";
     }
 
     void Dump2StringIR(void *aux) const override {
+        /* TODO: params check? return type check? */
         // map_blockID2symbolTable[ident] = SymbolTable();
         // stack_namespace.push(ident);
         std::cout << "fun ";
         std::cout << "@" << ident << "(";
-        std::cout << "): ";
-        /* TODO: type check? */
+
+        int cur_namespace = stack_namespace.top();
+
+        func_f_params_result_t func_f_params_result;
+        if(func_f_params == nullptr){
+            func_f_params_result.count = 0;
+        }
+        else{
+            func_f_params->Dump2StringIR(&func_f_params_result);
+        }
+
+        std::cout << ")";
+
         std::string string_type;
         func_type->Dump2StringIR(&string_type);
 
+        map_blockID2symbolTable[cur_namespace].insert_func_def(ident, string_type);
+
         std::cout << " {" << std::endl;
         std::cout << "%" << "entry" << ":" << std::endl;
+
         /* TODO: may pass some func related info to its block? */
-        block->Dump2StringIR(nullptr);
+        block->Dump2StringIR(&func_f_params_result);
+
         std::cout << "\tret" << std::endl;
         std::cout << "}" << std::endl;
         // stack_namespace.pop();
@@ -407,7 +495,7 @@ public:
     }
 };
 
-/* FuncType  ::= "int"; */
+/* FuncType    ::= "void" | "int"; */
 class FuncTypeAST : public BaseAST {
 public:
     std::string type_string;
@@ -419,9 +507,76 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        assert(type_string == "int");
+        assert(type_string == "int" || type_string == "void");
         *((std::string *)aux) = type_string;
-        std::cout << "i32";
+        if(type_string == "int"){
+            std::cout << ": i32";
+        }
+    }
+};
+
+/* FuncFParams ::= FuncFParam {"," FuncFParam}; */
+class FuncFParamsAST : public BaseAST {
+public:
+    std::vector<std::unique_ptr<BaseAST> > vec_func_f_params;
+
+    void Dump() const override {
+        std::cout << "FuncFParamsAST { ";
+        auto ii = vec_func_f_params.begin();
+        auto ie = vec_func_f_params.end();
+        for(; ii != ie; ++ii){
+            (*ii)->Dump();
+        }
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        func_f_params_result_t *params_r = (func_f_params_result_t *)aux;
+        params_r->count = 0;
+        params_r->params = std::vector<func_f_param_result_t>();
+        auto ii = vec_func_f_params.begin();
+        auto ie = vec_func_f_params.end();
+        if(ii != ie){
+            func_f_param_result_t param_r;
+            (*ii)->Dump2StringIR(&param_r);
+            params_r->count++;
+            params_r->params.push_back(param_r);
+            ++ii;
+        }
+        for(; ii != ie; ++ii){
+            func_f_param_result_t param_r;
+            std::cout << ", ";
+            (*ii)->Dump2StringIR(&param_r);
+            params_r->count++;
+            params_r->params.push_back(param_r);
+        }
+    }
+};
+
+/* FuncFParam  ::= BType IDENT; */
+class FuncFParamAST : public BaseAST {
+public:
+    std::unique_ptr<BaseAST> b_type;
+    std::string ident;
+
+    void Dump() const override {
+        std::cout << "FuncFParamAST { ";
+        b_type->Dump();
+        std::cout <<  " " << ident;
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        func_f_param_result_t *param_r = (func_f_param_result_t *)aux;
+        std::string string_b_type;
+        b_type->Dump2StringIR(&string_b_type);
+
+        /* TODO: what if other types */
+        assert(string_b_type == "int");
+        std::cout << "@" << ident << ": " << "i32";
+
+        param_r->b_type = string_b_type;
+        param_r->ident = ident;
     }
 };
 
@@ -441,27 +596,49 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
+        /* might be nullptr*/
+        func_f_params_result_t *params = (func_f_params_result_t *)aux;
+
+        // stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
         map_blockID2symbolTable[id] = SymbolTable();
 
         /* TODO: modify here after introducing global var */
-        if(stack_namespace.empty()){
-            map_blockID2symbolTable[id].update_parent_block(-1);
-        }
-        else{
+        // if(stack_namespace.empty()){
+        //     map_blockID2symbolTable[id].update_parent_block(-1);
+        // }
+        // else{
+            assert(!stack_namespace.empty());
             map_blockID2symbolTable[id].update_parent_block(stack_namespace.top());
-        }
+        // }
         stack_namespace.push(id);
 
-        if(block_items != nullptr){
-            block_items->Dump2StringIR(aux);
-        }
-        else{
-            if(last_stmt_result != nullptr){
-                // last_stmt_result->is_end_with_ret = false;
-                last_stmt_result->is_end_with_if = false;
+        if(params != nullptr){
+            int count = params->count;
+            for(int i = 0; i < count; ++i){
+                std::string &ident = params->params[i].ident;
+                assert(!map_blockID2symbolTable[id].bool_symbol_exist_local(ident));
+
+                assert(params->params[i].b_type == "int");
+                map_blockID2symbolTable[id].insert_var_func_param_int(ident, id);
+
+                std::cout << "\t" << map_blockID2symbolTable[id].get_var_pointer_int(ident);
+                std::cout << "= alloc i32" << std::endl;
+
+                std::cout << "\tstore @" << ident << ", ";
+                std::cout << map_blockID2symbolTable[id].get_var_pointer_int(ident);
+                std::cout << std::endl;
             }
         }
+
+        if(block_items != nullptr){
+            block_items->Dump2StringIR(nullptr);
+        }
+        // else{
+        //     if(last_stmt_result != nullptr){
+        //         // last_stmt_result->is_end_with_ret = false;
+        //         last_stmt_result->is_end_with_if = false;
+        //     }
+        // }
 
         stack_namespace.pop();
         map_blockID2symbolTable[id].clear_table();
@@ -484,16 +661,16 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
-        if(last_stmt_result != nullptr){
-            // last_stmt_result->is_end_with_ret = false;
-            last_stmt_result->is_end_with_if = false;
-        }
+        // stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
+        // if(last_stmt_result != nullptr){
+        //     // last_stmt_result->is_end_with_ret = false;
+        //     last_stmt_result->is_end_with_if = false;
+        // }
 
         auto ii = vec_block_items.begin();
         auto ie = vec_block_items.end();
         for(; ii != ie; ++ii){
-            (*ii)->Dump2StringIR(aux);
+            (*ii)->Dump2StringIR(nullptr);
         }
     }
 };
@@ -514,7 +691,7 @@ public:
     void Dump2StringIR(void *aux) const override {
         // stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
         if(is_stmt){
-            item->Dump2StringIR(aux);
+            item->Dump2StringIR(nullptr);
         }
         else{
             item->Dump2StringIR(nullptr);
@@ -542,7 +719,7 @@ public:
 
     void Dump2StringIR(void *aux) const override {
         // stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
-        stmt->Dump2StringIR(aux);
+        stmt->Dump2StringIR(nullptr);
     }
 };
 
@@ -621,11 +798,11 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        stmt_result_t *stmt_result = (stmt_result_t *)aux;
-        if(stmt_result != nullptr){
-            // stmt_result->is_end_with_ret = false;
-            stmt_result->is_end_with_if = false;
-        }
+        // stmt_result_t *stmt_result = (stmt_result_t *)aux;
+        // if(stmt_result != nullptr){
+        //     // stmt_result->is_end_with_ret = false;
+        //     stmt_result->is_end_with_if = false;
+        // }
 
         if(rule == 1){
             exp_result_t exp_result;
@@ -652,7 +829,7 @@ public:
             }
         }
         else if(rule == 3){
-            block->Dump2StringIR(aux);
+            block->Dump2StringIR(nullptr);
         }
         else if(rule == 4){
             // if(stmt_result != nullptr){
@@ -678,7 +855,7 @@ public:
             std::cout << "%after_ret_" << ret_id << ":" << std::endl;
         }
         else if(rule == 5){
-            stmt_result_t stmt_result_1, stmt_result_2;
+            // stmt_result_t stmt_result_1, stmt_result_2;
             exp_result_t exp_result;
             exp->Dump2StringIR(&exp_result);
             if(exp_result.depth != 0){
@@ -691,13 +868,13 @@ public:
             std::cout << "%else_" << if_stmt_id << std::endl;
 
             std::cout << "%then_" << if_stmt_id << ":" << std::endl;
-            stmt_true->Dump2StringIR(&stmt_result_1);
+            stmt_true->Dump2StringIR(nullptr);
             // if(!stmt_result_1.is_end_with_ret){
                 std::cout << "\tjump %end_" << if_stmt_id << std::endl;
             // }
 
             std::cout << "%else_" << if_stmt_id << ":" << std::endl;
-            stmt_false->Dump2StringIR(&stmt_result_2);
+            stmt_false->Dump2StringIR(nullptr);
             // if(!stmt_result_2.is_end_with_ret || stmt_result_2.is_end_with_if){
                 std::cout << "\tjump %end_" << if_stmt_id << std::endl;
             // }
@@ -705,16 +882,16 @@ public:
             // if(!(stmt_result_1.is_end_with_ret && stmt_result_2.is_end_with_ret)){
                 std::cout << "%end_" << if_stmt_id << ":" << std::endl;
             // }
-            if(stmt_result != nullptr){
-                // stmt_result->is_end_with_ret = stmt_result_1.is_end_with_ret
-                //                             && stmt_result_2.is_end_with_ret;
-                stmt_result->is_end_with_if = true;
-            }
+            // if(stmt_result != nullptr){
+            //     // stmt_result->is_end_with_ret = stmt_result_1.is_end_with_ret
+            //     //                             && stmt_result_2.is_end_with_ret;
+            //     stmt_result->is_end_with_if = true;
+            // }
 
         }
         else if(rule == 6){
             exp_result_t exp_result;
-            stmt_result_t stmt_body_result;
+            // stmt_result_t stmt_body_result;
 
             stack_while_id.push(while_id);
 
@@ -733,7 +910,7 @@ public:
 
             std::cout << "%while_body_" << while_id << ":" << std::endl;
             /* TODO: emmm, stmt_result_t seems unnecessary now? */
-            stmt_body->Dump2StringIR(&stmt_body_result);
+            stmt_body->Dump2StringIR(nullptr);
             std::cout << "\tjump %while_cond_" << while_id << std::endl;
 
             std::cout << "%while_end_" << while_id << ":" << std::endl;
@@ -789,13 +966,13 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        stmt_result_t *stmt_result = (stmt_result_t *)aux;
-        if(stmt_result != nullptr){
-            // stmt_result->is_end_with_ret = false;
-            stmt_result->is_end_with_if = true;
-        }
+        // stmt_result_t *stmt_result = (stmt_result_t *)aux;
+        // if(stmt_result != nullptr){
+        //     // stmt_result->is_end_with_ret = false;
+        //     stmt_result->is_end_with_if = true;
+        // }
 
-        stmt_result_t stmt_result_1, stmt_result_2;
+        // stmt_result_t stmt_result_1, stmt_result_2;
         exp_result_t exp_result;
         exp->Dump2StringIR(&exp_result);
         if(exp_result.depth != 0){
@@ -813,7 +990,7 @@ public:
         }
 
         std::cout << "%then_" << if_stmt_id << ":" << std::endl;
-        stmt_true->Dump2StringIR(&stmt_result_1);
+        stmt_true->Dump2StringIR(nullptr);
 
         if(is_with_else){
             // if(!stmt_result_1.is_end_with_ret){
@@ -821,7 +998,7 @@ public:
             // }
 
             std::cout << "%else_" << if_stmt_id << ":" << std::endl;
-            stmt_false->Dump2StringIR(&stmt_result_2);
+            stmt_false->Dump2StringIR(nullptr);
             // if(!stmt_result_2.is_end_with_ret || stmt_result_2.is_end_with_if){
                 std::cout << "\tjump %end_" << if_stmt_id << std::endl;
             // }
@@ -958,7 +1135,7 @@ public:
 };
 
 /*
-    UnaryExp    ::= PrimaryExp | UnaryOp UnaryExp;
+    UnaryExp    ::= PrimaryExp | IDENT "(" [FuncRParams] ")" | UnaryOp UnaryExp;
     UnaryOp     ::= "+" | "-" | "!";
 */
 class UnaryExpAST : public BaseAST {
@@ -967,6 +1144,8 @@ public:
     std::unique_ptr<BaseAST> primaryexp;
     std::string unaryop;
     std::unique_ptr<BaseAST> unaryexp;
+    std::string ident;
+    std::unique_ptr<BaseAST> func_r_params;
 
     void Dump() const override {
         std::cout << "UnaryExpAST { ";
@@ -976,6 +1155,16 @@ public:
         else if(rule == 2){
             std::cout << unaryop;
             unaryexp->Dump();
+        }
+        else if(rule == 3){
+            std::cout << ident << " ( ";
+            if(func_r_params != nullptr){
+                func_r_params->Dump();
+            }
+            std::cout << " )";
+        }
+        else{
+            assert(false);
         }
         std::cout << " }";
     }
@@ -1035,7 +1224,94 @@ public:
                 }
             }
         }
+        else if(rule == 3){
+            exp_result_t *result = (exp_result_t *)aux;
+            func_r_params_result_t params;
+
+            if(func_r_params != nullptr){
+                func_r_params->Dump2StringIR(&params);
+            }
+
+            result->depth = 1;
+
+            int cur_namespace = stack_namespace.top();
+
+            std::string type_return = map_blockID2symbolTable[cur_namespace].get_func_return_type(ident);
+
+            if(type_return == "void"){
+                std::cout << "\tcall @" << ident << "(";
+            }
+            else if(type_return == "int"){
+                result->result_id = result_id++;
+                std::cout << "\t%" << result->result_id << " = call @";
+                std::cout << ident << "(";
+            }
+            else{
+                assert(false);
+            }
+
+            if(func_r_params != nullptr){
+                int i = 0;
+                int count = params.count;
+                if(i != count){
+                    if(params.params[i].depth == 0){
+                        std::cout << params.params[i].result_number;
+                    }
+                    else{
+                        std::cout << "%" << params.params[i].result_id;
+                    }
+                    ++i;
+                }
+                for(; i < params.count; ++i){
+                    std::cout << ", ";
+                    if(params.params[i].depth == 0){
+                        std::cout << params.params[i].result_number;
+                    }
+                    else{
+                        std::cout << "%" << params.params[i].result_id;
+                    }
+                }
+            }
+
+            std::cout << ")" << std::endl;
+        }
+        else{
+            assert(false);
+        }
     }
+};
+
+/* FuncRParams ::= Exp {"," Exp}; */
+class FuncRParamsAST : public BaseAST {
+public:
+    std::vector<std::unique_ptr<BaseAST> > vec_func_r_params;
+
+    void Dump() const override {
+        std::cout << "FuncRParamsAST { ";
+        auto ii = vec_func_r_params.begin();
+        auto ie = vec_func_r_params.end();
+        for(; ii != ie; ++ii){
+            (*ii)->Dump();
+        }
+        std::cout << " }";
+    }
+
+    void Dump2StringIR(void *aux) const override {
+        func_r_params_result_t *params = (func_r_params_result_t *)aux;
+        params->count = 0;
+        params->params = std::vector<exp_result_t>();
+
+        auto ii = vec_func_r_params.begin();
+        auto ie = vec_func_r_params.end();
+        for(; ii != ie; ++ii){
+            /* TODO */
+            exp_result_t exp_result;
+            (*ii)->Dump2StringIR(&exp_result);
+            params->count++;
+            params->params.push_back(exp_result);
+        }
+    }
+
 };
 
 /* MulExp      ::= UnaryExp | MulExp ("*" | "/" | "%") UnaryExp; */

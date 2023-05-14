@@ -40,8 +40,11 @@ LogicOr         "||"
 {BlockComment}  { /* Ignore; nop */ }
 
 "int"           { return INT; }
-"return"        { return RETURN; }
+"void"          { return VOID; }
+
 "const"         { return CONST; }
+
+"return"        { return RETURN; }
 "if"            { return IF; }
 "else"          { return ELSE; }
 "while"         { return WHILE; }

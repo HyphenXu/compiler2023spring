@@ -18,7 +18,7 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 
 using namespace std;
 
-static int block_id = 0;
+static int block_id = 1; /* Global is ZERO */
 static int if_id = 0;
 static int ret_id = 0;
 static int l_or_exp_id = 0;
@@ -44,24 +44,28 @@ static int while_id = 0;
 }
 
 /* Declare all possible types of the tokens returned by the lexer */
-%token              INT RETURN CONST IF ELSE WHILE BREAK CONTINUE
+%token              INT VOID CONST
+%token              RETURN IF ELSE WHILE BREAK CONTINUE
 %token  <str_val>   IDENT
 %token  <int_val>   INT_CONST
 %token  <str_val>   ORDEREDCOMPOP UNORDEREDCOMPOP LOGICAND LOGICOR
 
 /* Define the types of non-terminators */
+%type <ast_val> CompUnits CompUnit
 %type <ast_val> Decl
 %type <ast_val> ConstDecl BType ConstDefs ConstDef ConstInitVal
 %type <ast_val> VarDecl VarDefs VarDef InitVal
-%type <ast_val> FuncDef FuncType
+%type <ast_val> FuncDef FuncType FuncFParams FuncFParam
 %type <ast_val> Block BlockItems BlockItem GeneralStmt Stmt OpenStmt
 %type <ast_val> Exp
 %type <ast_val> LVal
-%type <ast_val> PrimaryExp UnaryExp MulExp AddExp
+%type <ast_val> PrimaryExp UnaryExp FuncRParams MulExp AddExp
 %type <ast_val> RelExp EqExp LAndExp LOrExp
 %type <ast_val> ConstExp
 %type <int_val> Number
 %type <str_val> UnaryOp
+
+%start StartSymbol
 
 %%
 
@@ -72,11 +76,36 @@ static int while_id = 0;
  *  <%parse-param> "ast".
  *  $1 here is 'the return value of the first symbol'
  */
+
+StartSymbol
+    : CompUnits {
+        auto start_symbol = make_unique<StartSymbolAST>();
+        start_symbol->comp_units = unique_ptr<BaseAST>($1);
+        ast = move(start_symbol);
+    }
+    ;
+
+CompUnits
+    : CompUnits CompUnit {
+        auto ast = reinterpret_cast<CompUnitsAST *>($1);
+        ast->vec_comp_units.push_back(unique_ptr<BaseAST>($2));
+        $$ = ast;
+    }
+    | CompUnit {
+        auto ast = new CompUnitsAST();
+        ast->vec_comp_units.push_back(unique_ptr<BaseAST>($1));
+        $$ = ast;
+    }
+    ;
+
 CompUnit
     : FuncDef {
-        auto comp_unit = make_unique<CompUnitAST>();
-        comp_unit->func_def = unique_ptr<BaseAST>($1);
-        ast = move(comp_unit);
+        // auto comp_unit = make_unique<CompUnitAST>();
+        // comp_unit->func_def = unique_ptr<BaseAST>($1);
+        // ast = move(comp_unit);
+        auto ast = new CompUnitAST();
+        ast->func_def = unique_ptr<BaseAST>($1);
+        $$ = ast;
     }
     ;
 
@@ -200,7 +229,16 @@ FuncDef
         auto ast = new FuncDefAST();
         ast->func_type = unique_ptr<BaseAST>($1);
         ast->ident = *unique_ptr<string>($2);
+        ast->func_f_params = nullptr;
         ast->block = unique_ptr<BaseAST>($5);
+        $$ = ast;
+    }
+    | FuncType IDENT '(' FuncFParams ')' Block {
+        auto ast = new FuncDefAST();
+        ast->func_type = unique_ptr<BaseAST>($1);
+        ast->ident = *unique_ptr<string>($2);
+        ast->func_f_params = unique_ptr<BaseAST>($4);
+        ast->block = unique_ptr<BaseAST>($6);
         $$ = ast;
     }
     ;
@@ -209,6 +247,33 @@ FuncType
     : INT {
         auto ast = new FuncTypeAST();
         ast->type_string = string("int");
+        $$ = ast;
+    }
+    | VOID {
+        auto ast = new FuncTypeAST();
+        ast->type_string = string("void");
+        $$ = ast;
+    }
+    ;
+
+FuncFParams
+    : FuncFParams ',' FuncFParam {
+        auto ast = reinterpret_cast<FuncFParamsAST *>($1);
+        ast->vec_func_f_params.push_back(unique_ptr<BaseAST>($3));
+        $$ = ast;
+    }
+    | FuncFParam {
+        auto ast = new FuncFParamsAST();
+        ast->vec_func_f_params.push_back(unique_ptr<BaseAST>($1));
+        $$ = ast;
+    }
+    ;
+
+FuncFParam
+    : BType IDENT {
+        auto ast = new FuncFParamAST();
+        ast->b_type = unique_ptr<BaseAST>($1);
+        ast->ident = *unique_ptr<string>($2);
         $$ = ast;
     }
     ;
@@ -419,12 +484,39 @@ UnaryExp
         ast->unaryexp = unique_ptr<BaseAST>($2);
         $$ = ast;
     }
+    | IDENT '(' ')' {
+        auto ast = new UnaryExpAST();
+        ast->rule = 3;
+        ast->ident = *unique_ptr<string>($1);
+        ast->func_r_params = nullptr;
+        $$ = ast;
+    }
+    | IDENT '(' FuncRParams ')' {
+        auto ast = new UnaryExpAST();
+        ast->rule = 3;
+        ast->ident = *unique_ptr<string>($1);
+        ast->func_r_params = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
     ;
 
 UnaryOp
     : '+' { auto op = new string("+"); $$ = op; }
     | '-' { auto op = new string("-"); $$ = op; }
     | '!' { auto op = new string("!"); $$ = op; }
+    ;
+
+FuncRParams
+    : FuncRParams ',' Exp {
+        auto ast = reinterpret_cast<FuncRParamsAST *>($1);
+        ast->vec_func_r_params.push_back(unique_ptr<BaseAST>($3));
+        $$ = ast;
+    }
+    | Exp {
+        auto ast = new FuncRParamsAST();
+        ast->vec_func_r_params.push_back(unique_ptr<BaseAST>($1));
+        $$ = ast;
+    }
     ;
 
 MulExp

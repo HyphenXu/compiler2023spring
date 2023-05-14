@@ -100,7 +100,7 @@ void Visit(const koopa_raw_function_t &func){
     func_alloc_frame(func);
     // frame = &(frames[func->name]);
 
-    std::cout << "\t.global " << func->name + 1 << std::endl;
+    std::cout << "\t.globl " << func->name + 1 << std::endl;
     std::cout << func->name + 1 << ": " << std::endl;
 
     size_t frame_size = map_frame2size[frame];
