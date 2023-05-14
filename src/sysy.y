@@ -23,6 +23,7 @@ static int if_id = 0;
 static int ret_id = 0;
 static int l_or_exp_id = 0;
 static int l_and_exp_id = 0;
+static int while_id = 0;
 
 %}
 
@@ -43,7 +44,7 @@ static int l_and_exp_id = 0;
 }
 
 /* Declare all possible types of the tokens returned by the lexer */
-%token              INT RETURN CONST IF ELSE
+%token              INT RETURN CONST IF ELSE WHILE BREAK CONTINUE
 %token  <str_val>   IDENT
 %token  <int_val>   INT_CONST
 %token  <str_val>   ORDEREDCOMPOP UNORDEREDCOMPOP LOGICAND LOGICOR
@@ -318,6 +319,24 @@ Stmt
         ast->exp = unique_ptr<BaseAST>($3);
         ast->stmt_true = unique_ptr<BaseAST>($5);
         ast->stmt_false = unique_ptr<BaseAST>($7);
+        $$ = ast;
+    }
+    | WHILE '(' Exp ')' GeneralStmt {
+        auto ast = new StmtAST();
+        ast->rule = 6;
+        ast->while_id = while_id++;
+        ast->exp = unique_ptr<BaseAST>($3);
+        ast->stmt_body = unique_ptr<BaseAST>($5);
+        $$ = ast;
+    }
+    | BREAK ';' {
+        auto ast = new StmtAST();
+        ast->rule = 7;
+        $$ = ast;
+    }
+    | CONTINUE ';' {
+        auto ast = new StmtAST();
+        ast->rule = 8;
         $$ = ast;
     }
     ;

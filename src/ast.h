@@ -16,6 +16,7 @@ static int result_id = 0;
 // static std::map<std::string, SymbolTable> map_func2symbolTable;
 // static std::stack<std::string> stack_namespace;
 
+static std::stack<int> stack_while_id;
 
 typedef struct{
     int depth;
@@ -103,6 +104,9 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
+        /* Some initialization */
+        stack_while_id = std::stack<int>();
+
         func_def->Dump2StringIR(nullptr);
     }
 };
@@ -555,11 +559,13 @@ public:
     int rule;
     int if_stmt_id;
     int ret_id;
+    int while_id;
     std::unique_ptr<BaseAST> l_val;
     std::unique_ptr<BaseAST> exp;
     std::unique_ptr<BaseAST> block;
     std::unique_ptr<BaseAST> stmt_true;
     std::unique_ptr<BaseAST> stmt_false;
+    std::unique_ptr<BaseAST> stmt_body;
 
 
     void Dump() const override {
@@ -595,6 +601,19 @@ public:
             std::cout << " else ";
             stmt_false->Dump();
             std::cout << " }";
+        }
+        else if(rule == 6){
+            std::cout << "while ( ";
+            exp->Dump();
+            std::cout << ") ";
+            stmt_body->Dump();
+            std::cout << " }";
+        }
+        else if(rule == 7){
+            std::cout << "break ; }";
+        }
+        else if(rule == 8){
+            std::cout << "continue ; }";
         }
         else{
             assert(false);
@@ -692,6 +711,50 @@ public:
                 stmt_result->is_end_with_if = true;
             }
 
+        }
+        else if(rule == 6){
+            exp_result_t exp_result;
+            stmt_result_t stmt_body_result;
+
+            stack_while_id.push(while_id);
+
+            std::cout << "\tjump %while_cond_" << while_id << std::endl;
+
+            std::cout << "%while_cond_" << while_id << ":" << std::endl;
+            exp->Dump2StringIR(&exp_result);
+            if(exp_result.depth == 0){
+                std::cout << "\tbr " << exp_result.result_number << ", ";
+            }
+            else{
+                std::cout << "\tbr %" << exp_result.result_id << ", ";
+            }
+            std::cout << "%while_body_" << while_id << ", ";
+            std::cout << "%while_end_" << while_id << std::endl;
+
+            std::cout << "%while_body_" << while_id << ":" << std::endl;
+            /* TODO: emmm, stmt_result_t seems unnecessary now? */
+            stmt_body->Dump2StringIR(&stmt_body_result);
+            std::cout << "\tjump %while_cond_" << while_id << std::endl;
+
+            std::cout << "%while_end_" << while_id << ":" << std::endl;
+
+            stack_while_id.pop();
+        }
+        else if(rule == 7){
+            assert(!stack_while_id.empty());
+            int target = stack_while_id.top();
+
+            std::cout << "\tjump %while_end_" << target << std::endl;
+            std::cout << "%after_break_while_" << target << ":";
+            std::cout << std::endl;
+        }
+        else if(rule == 8){
+            assert(!stack_while_id.empty());
+            int target = stack_while_id.top();
+
+            std::cout << "\tjump %while_cond_" << target << std::endl;
+            std::cout << "%after_continue_while_" << target << ":";
+            std::cout << std::endl;
         }
         else{
             assert(false);
