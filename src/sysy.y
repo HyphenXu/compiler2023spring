@@ -104,8 +104,14 @@ CompUnit
         // comp_unit->func_def = unique_ptr<BaseAST>($1);
         // ast = move(comp_unit);
         auto ast = new CompUnitAST();
-        ast->func_def = unique_ptr<BaseAST>($1);
+        ast->is_func_def = true;
+        ast->unit = unique_ptr<BaseAST>($1);
         $$ = ast;
+    }
+    | Decl {
+        auto ast = new CompUnitAST();
+        ast->is_func_def = false;
+        ast->unit = unique_ptr<BaseAST>($1);
     }
     ;
 
@@ -113,13 +119,13 @@ CompUnit
 Decl
     : ConstDecl {
         auto ast = new DeclAST();
-        ast->rule = 1;
+        ast->is_const_decl = true;
         ast->decl = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | VarDecl {
         auto ast = new DeclAST();
-        ast->rule = 2;
+        ast->is_const_decl = false;
         ast->decl = unique_ptr<BaseAST>($1);
         $$ = ast;
     }

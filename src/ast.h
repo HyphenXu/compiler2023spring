@@ -52,6 +52,11 @@ typedef struct{
     std::vector<exp_result_t> params;
 } func_r_params_result_t;
 
+typedef struct{
+    bool is_global;
+    std::string b_type;
+} decl_param_t;
+
 /* Base AST class */
 class BaseAST;
 
@@ -164,16 +169,25 @@ public:
 
 class CompUnitAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> func_def;
+    bool is_func_def;
+    std::unique_ptr<BaseAST> unit;
 
     void Dump() const override {
         std::cout << "CompUnitAST { ";
-        func_def->Dump();
+        std::cout << "is_func_def: " << is_func_def;
+        unit->Dump();
         std::cout << " }";
     }
 
     void Dump2StringIR(void *aux) const override {
-        func_def->Dump2StringIR(nullptr);
+        if(is_func_def){
+            unit->Dump2StringIR(nullptr);
+        }
+        else{
+            decl_param_t param;
+            param.is_global = true;
+            unit->Dump2StringIR(&param);
+        }
     }
 };
 
@@ -181,18 +195,24 @@ public:
 /* Decl          ::= ConstDecl | VarDecl; */
 class DeclAST : public BaseAST {
 public:
-    int rule;
+    bool is_const_decl;
     std::unique_ptr<BaseAST> decl;
 
     void Dump() const override {
         std::cout << "DeclAST { ";
-        std::cout << "rule: " << rule << ", ";
+        std::cout << "is_const_decl: " << is_const_decl << ", ";
         decl->Dump();
         std::cout << " }";
     }
 
     void Dump2StringIR(void *aux) const override {
-        decl->Dump2StringIR(nullptr);
+        if(is_const_decl){
+            decl->Dump2StringIR(nullptr);
+        }
+        else{
+            decl->Dump2StringIR(aux);
+        }
+
     }
 };
 
@@ -324,7 +344,9 @@ public:
         /* TODO: what if other type? */
         assert(string_b_type == "int");
 
-        var_defs->Dump2StringIR(&string_b_type);
+        decl_param_t *param = (decl_param_t *)aux;
+        param->b_type = string_b_type;
+        var_defs->Dump2StringIR(aux);
     }
 };
 
@@ -368,10 +390,12 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        std::string *string_b_type = (std::string *)aux;
+        // std::string *string_b_type = (std::string *)aux;
+        decl_param_t *param = (decl_param_t *)aux;
         /* TODO: what if other type */
-        assert((*string_b_type) == "int");
+        assert((param->b_type) == "int");
         std::string string_koopa_type = "i32";
+        bool is_global_var = param->is_global;
 
         if(init_val == nullptr){
             int cur_namespace = stack_namespace.top();
@@ -379,43 +403,75 @@ public:
 
             map_blockID2symbolTable[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
 
-            std::cout << "\t"
+            if(is_global_var){
+                std::cout << "global "
+                << map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident)
+                << " = alloc "
+                << string_koopa_type
+                << ", zeroinit"
+                << std::endl;
+            }
+            else{
+                std::cout << "\t"
                 << map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident)
                 << " = alloc "
                 << string_koopa_type
                 << std::endl;
+            }
         }
         else{
             exp_result_t init_val_result;
             init_val->Dump2StringIR(&init_val_result);
 
-            std::string string_value_to_be_stored;
-            if(init_val_result.depth == 0){
-                /* the value is in init_val_result.result_number */
-                string_value_to_be_stored = std::to_string(init_val_result.result_number);
-            }
-            else{
-                /* the value is in %init_val_result.result_id*/
-                string_value_to_be_stored = "%" + std::to_string(init_val_result.result_id);
-            }
+            if(is_global_var){
+                /*
+                    TODO: what if not depth == 0?
+                    e.g., int x = 1, y = x + 1; (?)
+                */
+                assert(init_val_result.depth == 0);
 
-            int cur_namespace = stack_namespace.top();
-            assert(!map_blockID2symbolTable[cur_namespace].bool_symbol_exist_local(ident));
+                int cur_namespace = stack_namespace.top();
+                assert(!map_blockID2symbolTable[cur_namespace].bool_symbol_exist_local(ident));
 
-            map_blockID2symbolTable[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
+                map_blockID2symbolTable[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
 
-            std::string string_var_pointer = map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident);
-
-            std::cout << "\t"
-                << string_var_pointer
+                std::cout << "global "
+                << map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident)
                 << " = alloc "
                 << string_koopa_type
+                << ", "
+                << init_val_result.result_number
                 << std::endl;
+            }
+            else{
+                std::string string_value_to_be_stored;
+                if(init_val_result.depth == 0){
+                    /* the value is in init_val_result.result_number */
+                    string_value_to_be_stored = std::to_string(init_val_result.result_number);
+                }
+                else{
+                    /* the value is in %init_val_result.result_id*/
+                    string_value_to_be_stored = "%" + std::to_string(init_val_result.result_id);
+                }
 
-            std::cout << "\tstore "
-                << string_value_to_be_stored
-                << ", " << string_var_pointer
-                << std::endl;
+                int cur_namespace = stack_namespace.top();
+                assert(!map_blockID2symbolTable[cur_namespace].bool_symbol_exist_local(ident));
+
+                map_blockID2symbolTable[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
+
+                std::string string_var_pointer = map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident);
+
+                std::cout << "\t"
+                    << string_var_pointer
+                    << " = alloc "
+                    << string_koopa_type
+                    << std::endl;
+
+                std::cout << "\tstore "
+                    << string_value_to_be_stored
+                    << ", " << string_var_pointer
+                    << std::endl;
+            }
         }
     }
 };
@@ -695,7 +751,9 @@ public:
             item->Dump2StringIR(nullptr);
         }
         else{
-            item->Dump2StringIR(nullptr);
+            decl_param_t param;
+            param.is_global = false;
+            item->Dump2StringIR(&param);
             // stmt_result_t *stmt_result = (stmt_result_t *)aux;
             // if(stmt_result != nullptr){
             //     stmt_result->is_end_with_ret = false;
