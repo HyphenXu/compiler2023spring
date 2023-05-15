@@ -529,6 +529,11 @@ public:
 
         std::cout << ")";
 
+        assert(func_type == "int" || func_type == "void");
+        if(func_type == "int"){
+            std::cout << ": i32";
+        }
+
         map_blockID2symbolTable[cur_namespace].insert_func_def(ident, func_type);
 
         std::cout << " {" << std::endl;
