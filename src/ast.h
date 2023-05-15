@@ -55,7 +55,6 @@ typedef struct{
 /* Base AST class */
 class BaseAST;
 
-
 /* Part 1: CompUnit */
 class StartSymbolAST;
 class CompUnitsAST;
@@ -130,6 +129,8 @@ public:
         stack_namespace.push(GLOBAL_NAMESPACE_ID);
         map_blockID2symbolTable[GLOBAL_NAMESPACE_ID] = SymbolTable();
         map_blockID2symbolTable[GLOBAL_NAMESPACE_ID].update_parent_block(ROOT_NAMESPACE_ID);
+
+        SymbolTable::insert_lib_func_def();
 
         comp_units->Dump2StringIR(nullptr);
     }

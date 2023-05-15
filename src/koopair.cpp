@@ -97,7 +97,11 @@ void Visit(const koopa_raw_slice_t &slice){
 void Visit(const koopa_raw_function_t &func){
     // func->ty, func->params
 
-    assert(func->bbs.len != 0);
+    /* ignore decl */
+    if(func->bbs.len == 0){
+        return;
+    }
+
     func_alloc_frame(func);
     // frame = &(frames[func->name]);
 

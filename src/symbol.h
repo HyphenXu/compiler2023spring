@@ -44,6 +44,7 @@ private:
     }
 
 public:
+    // static bool is_lib_func_defined;
     SymbolTable(){
         map_symbol2entry = std::map<std::string, symbol_table_entry_t>();
     }
@@ -117,6 +118,61 @@ public:
         map_symbol2entry.clear();
     }
 
+    static void insert_lib_func_def(){
+        static bool is_lib_func_defined = false;
+        if(is_lib_func_defined){
+            return;
+        }
+        is_lib_func_defined = true;
+
+        SymbolTable &st = map_blockID2symbolTable[GLOBAL_NAMESPACE_ID];
+
+        /* decl @getint(): i32 */
+        st.insert_func_def("getint", "int");
+        std::cout << "decl @" << "getint" << "(";
+        std::cout << ")" << ": " << "i32" << std::endl;
+
+        /* decl @getch(): i32 */
+        st.insert_func_def("getch", "int");
+        std::cout << "decl @" << "getch" << "(";
+        std::cout << ")" << ": " << "i32" << std::endl;
+
+        /* decl @getarray(*i32): i32 */
+        st.insert_func_def("getarray", "int");
+        std::cout << "decl @" << "getarray" << "(";
+        std::cout << "*i32";
+        std::cout << ")" << ": " << "i32" << std::endl;
+
+        /* decl @putint(i32) */
+        st.insert_func_def("putint", "void");
+        std::cout << "decl @" << "putint" << "(";
+        std::cout << "i32";
+        std::cout << ")" << std::endl;
+
+        /* decl @putch(i32) */
+        st.insert_func_def("putch", "void");
+        std::cout << "decl @" << "putch" << "(";
+        std::cout << "i32";
+        std::cout << ")" << std::endl;
+
+        /* decl @putarray(i32, *i32) */
+        st.insert_func_def("putarray", "void");
+        std::cout << "decl @" << "putarray" << "(";
+        std::cout << "i32" << ", " << "*i32";
+        std::cout << ")" << std::endl;
+
+        /* decl @starttime() */
+        st.insert_func_def("starttime", "void");
+        std::cout << "decl @" << "starttime" << "(";
+        std::cout << ")" << std::endl;
+
+        /* decl @stoptime() */
+        st.insert_func_def("stoptime", "void");
+        std::cout << "decl @" << "stoptime" << "(";
+        std::cout << ")" << std::endl;
+
+        std::cout << std::endl;
+    }
 };
 
 #endif /**< src/symbol.h */
