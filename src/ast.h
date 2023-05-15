@@ -68,7 +68,7 @@ class CompUnitAST;
 /* Part 2: Decl */
 class DeclAST;
 class ConstDeclAST;
-class BtypeAST;
+// class BtypeAST;
 class ConstDefsAST;
 class ConstDefAST;
 class ConstInitValAST;
@@ -79,7 +79,7 @@ class InitValAST;
 
 /* Part 3: Func */
 class FuncDefAST;
-class FuncTypeAST;
+// class FuncTypeAST;
 class FuncFParamsAST;
 class FuncFParamAST;
 
@@ -219,40 +219,38 @@ public:
 /* ConstDecl     ::= "const" BType ConstDef {"," ConstDef} ";"; */
 class ConstDeclAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> b_type;
+    std::string b_type;
     std::unique_ptr<BaseAST> const_defs;
 
     void Dump() const override {
         std::cout << "ConstDeclAST { ";
-        b_type->Dump();
+        std::cout << b_type;
         const_defs->Dump();
         std::cout << " }";
     }
 
     void Dump2StringIR(void *aux) const override {
-        std::string string_b_type;
-        b_type->Dump2StringIR(&string_b_type);
         /* TODO: what if other type? */
-        assert(string_b_type == "int");
+        assert(b_type == "int");
 
-        const_defs->Dump2StringIR(&string_b_type);
+        const_defs->Dump2StringIR((void *)&b_type);
     }
 };
 
-/* BType         ::= "int"; */
-class BTypeAST : public BaseAST {
-public:
-    std::string type_string;
+// /* BType         ::= "int"; */
+// class BTypeAST : public BaseAST {
+// public:
+//     std::string type_string;
 
-    void Dump() const override {
-        std::cout << "BTypeAST { " << type_string << " }";
-    }
+//     void Dump() const override {
+//         std::cout << "BTypeAST { " << type_string << " }";
+//     }
 
-    void Dump2StringIR(void *aux) const override {
-        std::string *string_b_type = (std::string *)aux;
-        (*string_b_type) = type_string;
-    }
-};
+//     void Dump2StringIR(void *aux) const override {
+//         std::string *string_b_type = (std::string *)aux;
+//         (*string_b_type) = type_string;
+//     }
+// };
 
 
 class ConstDefsAST : public BaseAST {
@@ -328,24 +326,21 @@ public:
 /* VarDecl       ::= BType VarDef {"," VarDef} ";"; */
 class VarDeclAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> b_type;
+    std::string b_type;
     std::unique_ptr<BaseAST> var_defs;
 
     void Dump() const override {
         std::cout << "VarDeclAST { ";
-        b_type->Dump();
+        std::cout << b_type;
         var_defs->Dump();
         std::cout << " }";
     }
 
     void Dump2StringIR(void *aux) const override {
-        std::string string_b_type;
-        b_type->Dump2StringIR(&string_b_type);
         /* TODO: what if other type? */
-        assert(string_b_type == "int");
-
+        assert(b_type == "int");
         decl_param_t *param = (decl_param_t *)aux;
-        param->b_type = string_b_type;
+        param->b_type = b_type;
         var_defs->Dump2StringIR(aux);
     }
 };
@@ -496,14 +491,14 @@ public:
 /* FuncDef     ::= FuncType IDENT "(" [FuncFParams] ")" Block; */
 class FuncDefAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> func_type;
+    std::string func_type;
     std::string ident;
     std::unique_ptr<BaseAST> func_f_params;
     std::unique_ptr<BaseAST> block;
 
     void Dump() const override {
         std::cout << "FuncDefAST { ";
-        func_type->Dump();
+        std::cout << func_type;
         std::cout << ", " << ident << ", ";
         if(func_f_params == nullptr){
             std::cout << "params_null, ";
@@ -534,10 +529,7 @@ public:
 
         std::cout << ")";
 
-        std::string string_type;
-        func_type->Dump2StringIR(&string_type);
-
-        map_blockID2symbolTable[cur_namespace].insert_func_def(ident, string_type);
+        map_blockID2symbolTable[cur_namespace].insert_func_def(ident, func_type);
 
         std::cout << " {" << std::endl;
         std::cout << "%" << "entry" << ":" << std::endl;
@@ -552,25 +544,25 @@ public:
     }
 };
 
-/* FuncType    ::= "void" | "int"; */
-class FuncTypeAST : public BaseAST {
-public:
-    std::string type_string;
+// /* FuncType    ::= "void" | "int"; */
+// class FuncTypeAST : public BaseAST {
+// public:
+//     std::string type_string;
 
-    void Dump() const override {
-        std::cout << "FuncTypeAST { ";
-        std::cout << type_string;
-        std::cout << " }";
-    }
+//     void Dump() const override {
+//         std::cout << "FuncTypeAST { ";
+//         std::cout << type_string;
+//         std::cout << " }";
+//     }
 
-    void Dump2StringIR(void *aux) const override {
-        assert(type_string == "int" || type_string == "void");
-        *((std::string *)aux) = type_string;
-        if(type_string == "int"){
-            std::cout << ": i32";
-        }
-    }
-};
+//     void Dump2StringIR(void *aux) const override {
+//         assert(type_string == "int" || type_string == "void");
+//         *((std::string *)aux) = type_string;
+//         if(type_string == "int"){
+//             std::cout << ": i32";
+//         }
+//     }
+// };
 
 /* FuncFParams ::= FuncFParam {"," FuncFParam}; */
 class FuncFParamsAST : public BaseAST {
@@ -613,26 +605,24 @@ public:
 /* FuncFParam  ::= BType IDENT; */
 class FuncFParamAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> b_type;
+    std::string b_type;
     std::string ident;
 
     void Dump() const override {
         std::cout << "FuncFParamAST { ";
-        b_type->Dump();
+        std::cout << b_type;
         std::cout <<  " " << ident;
         std::cout << " }";
     }
 
     void Dump2StringIR(void *aux) const override {
         func_f_param_result_t *param_r = (func_f_param_result_t *)aux;
-        std::string string_b_type;
-        b_type->Dump2StringIR(&string_b_type);
 
         /* TODO: what if other types */
-        assert(string_b_type == "int");
+        assert(b_type == "int");
         std::cout << "@" << ident << ": " << "i32";
 
-        param_r->b_type = string_b_type;
+        param_r->b_type = b_type;
         param_r->ident = ident;
     }
 };
@@ -766,19 +756,60 @@ public:
 /* GeneralStmt     ::= Stmt | OpenStmt; */
 class GeneralStmtAST : public BaseAST {
 public:
-    bool is_open;
+    // bool is_open;
+    int rule;
+    int while_id;
     std::unique_ptr<BaseAST> stmt;
+    std::unique_ptr<BaseAST> exp;
 
     void Dump() const override {
         std::cout << "GeneralStmtAST { ";
-        std::cout << "is_open: " << is_open << ", ";
-        stmt->Dump();
+        std::cout << "rule: " << rule << ", ";
+        if(rule == 3){
+            std::cout << "while ( ";
+            exp->Dump();
+            std::cout << ") ";
+            stmt->Dump();
+        }
+        else{
+            stmt->Dump();
+        }
         std::cout << " }";
     }
 
     void Dump2StringIR(void *aux) const override {
         // stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
-        stmt->Dump2StringIR(nullptr);
+        if(rule == 3){
+            exp_result_t exp_result;
+            // stmt_result_t stmt_body_result;
+
+            stack_while_id.push(while_id);
+
+            std::cout << "\tjump %while_cond_" << while_id << std::endl;
+
+            std::cout << "%while_cond_" << while_id << ":" << std::endl;
+            exp->Dump2StringIR(&exp_result);
+            if(exp_result.depth == 0){
+                std::cout << "\tbr " << exp_result.result_number << ", ";
+            }
+            else{
+                std::cout << "\tbr %" << exp_result.result_id << ", ";
+            }
+            std::cout << "%while_body_" << while_id << ", ";
+            std::cout << "%while_end_" << while_id << std::endl;
+
+            std::cout << "%while_body_" << while_id << ":" << std::endl;
+            /* TODO: emmm, stmt_result_t seems unnecessary now? */
+            stmt->Dump2StringIR(nullptr);
+            std::cout << "\tjump %while_cond_" << while_id << std::endl;
+
+            std::cout << "%while_end_" << while_id << ":" << std::endl;
+
+            stack_while_id.pop();
+        }
+        else{
+            stmt->Dump2StringIR(nullptr);
+        }
     }
 };
 
@@ -947,34 +978,6 @@ public:
             //     stmt_result->is_end_with_if = true;
             // }
 
-        }
-        else if(rule == 6){
-            exp_result_t exp_result;
-            // stmt_result_t stmt_body_result;
-
-            stack_while_id.push(while_id);
-
-            std::cout << "\tjump %while_cond_" << while_id << std::endl;
-
-            std::cout << "%while_cond_" << while_id << ":" << std::endl;
-            exp->Dump2StringIR(&exp_result);
-            if(exp_result.depth == 0){
-                std::cout << "\tbr " << exp_result.result_number << ", ";
-            }
-            else{
-                std::cout << "\tbr %" << exp_result.result_id << ", ";
-            }
-            std::cout << "%while_body_" << while_id << ", ";
-            std::cout << "%while_end_" << while_id << std::endl;
-
-            std::cout << "%while_body_" << while_id << ":" << std::endl;
-            /* TODO: emmm, stmt_result_t seems unnecessary now? */
-            stmt_body->Dump2StringIR(nullptr);
-            std::cout << "\tjump %while_cond_" << while_id << std::endl;
-
-            std::cout << "%while_end_" << while_id << ":" << std::endl;
-
-            stack_while_id.pop();
         }
         else if(rule == 7){
             assert(!stack_while_id.empty());

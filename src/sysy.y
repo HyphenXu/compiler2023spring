@@ -53,9 +53,9 @@ static int while_id = 0;
 /* Define the types of non-terminators */
 %type <ast_val> CompUnits CompUnit
 %type <ast_val> Decl
-%type <ast_val> ConstDecl BType ConstDefs ConstDef ConstInitVal
+%type <ast_val> ConstDecl ConstDefs ConstDef ConstInitVal
 %type <ast_val> VarDecl VarDefs VarDef InitVal
-%type <ast_val> FuncDef FuncType FuncFParams FuncFParam
+%type <ast_val> FuncDef FuncFParams FuncFParam
 %type <ast_val> Block BlockItems BlockItem GeneralStmt Stmt OpenStmt
 %type <ast_val> Exp
 %type <ast_val> LVal
@@ -112,6 +112,7 @@ CompUnit
         auto ast = new CompUnitAST();
         ast->is_func_def = false;
         ast->unit = unique_ptr<BaseAST>($1);
+        $$ = ast;
     }
     ;
 
@@ -132,20 +133,20 @@ Decl
     ;
 
 ConstDecl
-    : CONST BType ConstDefs ';' {
+    : CONST INT ConstDefs ';' {
         auto ast = new ConstDeclAST();
-        ast->b_type = unique_ptr<BaseAST>($2);
+        ast->b_type = string("int");
         ast->const_defs = unique_ptr<BaseAST>($3);
         $$ = ast;
     };
 
-BType
+/* BType
     : INT {
         auto ast = new BTypeAST();
         ast->type_string = string("int");
         $$ = ast;
     }
-    ;
+    ; */
 
 ConstDefs
     : ConstDefs ',' ConstDef {
@@ -178,9 +179,9 @@ ConstInitVal
     ;
 
 VarDecl
-    : BType VarDefs ';' {
+    : INT VarDefs ';' {
         auto ast = new VarDeclAST();
-        ast->b_type = unique_ptr<BaseAST>($1);
+        ast->b_type = string("int");
         ast->var_defs = unique_ptr<BaseAST>($2);
         $$ = ast;
     }
@@ -231,17 +232,33 @@ InitVal
  *  $$ is the return value of the non-terminators.
  */
 FuncDef
-    : FuncType IDENT '(' ')' Block {
+    : INT IDENT '(' ')' Block {
         auto ast = new FuncDefAST();
-        ast->func_type = unique_ptr<BaseAST>($1);
+        ast->func_type = string("int");
         ast->ident = *unique_ptr<string>($2);
         ast->func_f_params = nullptr;
         ast->block = unique_ptr<BaseAST>($5);
         $$ = ast;
     }
-    | FuncType IDENT '(' FuncFParams ')' Block {
+    | INT IDENT '(' FuncFParams ')' Block {
         auto ast = new FuncDefAST();
-        ast->func_type = unique_ptr<BaseAST>($1);
+        ast->func_type = string("int");
+        ast->ident = *unique_ptr<string>($2);
+        ast->func_f_params = unique_ptr<BaseAST>($4);
+        ast->block = unique_ptr<BaseAST>($6);
+        $$ = ast;
+    }
+    | VOID IDENT '(' ')' Block {
+        auto ast = new FuncDefAST();
+        ast->func_type = string("void");
+        ast->ident = *unique_ptr<string>($2);
+        ast->func_f_params = nullptr;
+        ast->block = unique_ptr<BaseAST>($5);
+        $$ = ast;
+    }
+    | VOID IDENT '(' FuncFParams ')' Block {
+        auto ast = new FuncDefAST();
+        ast->func_type = string("void");
         ast->ident = *unique_ptr<string>($2);
         ast->func_f_params = unique_ptr<BaseAST>($4);
         ast->block = unique_ptr<BaseAST>($6);
@@ -249,7 +266,7 @@ FuncDef
     }
     ;
 
-FuncType
+/* FuncType
     : INT {
         auto ast = new FuncTypeAST();
         ast->type_string = string("int");
@@ -260,7 +277,7 @@ FuncType
         ast->type_string = string("void");
         $$ = ast;
     }
-    ;
+    ; */
 
 FuncFParams
     : FuncFParams ',' FuncFParam {
@@ -276,9 +293,9 @@ FuncFParams
     ;
 
 FuncFParam
-    : BType IDENT {
+    : INT IDENT {
         auto ast = new FuncFParamAST();
-        ast->b_type = unique_ptr<BaseAST>($1);
+        ast->b_type = string("int");
         ast->ident = *unique_ptr<string>($2);
         $$ = ast;
     }
@@ -331,14 +348,22 @@ BlockItem
 GeneralStmt
     : Stmt {
         auto ast = new GeneralStmtAST();
-        ast->is_open = false;
+        ast->rule = 1;
         ast->stmt = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | OpenStmt {
         auto ast = new GeneralStmtAST();
-        ast->is_open = false;
+        ast->rule = 2;
         ast->stmt = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | WHILE '(' Exp ')' GeneralStmt {
+        auto ast = new GeneralStmtAST();
+        ast->rule = 3;
+        ast->while_id = while_id++;
+        ast->exp = unique_ptr<BaseAST>($3);
+        ast->stmt = unique_ptr<BaseAST>($5);
         $$ = ast;
     }
     ;
@@ -390,14 +415,6 @@ Stmt
         ast->exp = unique_ptr<BaseAST>($3);
         ast->stmt_true = unique_ptr<BaseAST>($5);
         ast->stmt_false = unique_ptr<BaseAST>($7);
-        $$ = ast;
-    }
-    | WHILE '(' Exp ')' GeneralStmt {
-        auto ast = new StmtAST();
-        ast->rule = 6;
-        ast->while_id = while_id++;
-        ast->exp = unique_ptr<BaseAST>($3);
-        ast->stmt_body = unique_ptr<BaseAST>($5);
         $$ = ast;
     }
     | BREAK ';' {
