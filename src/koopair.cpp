@@ -37,6 +37,7 @@ void Visit(const koopa_raw_store_t &store);
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_branch_t &branch);
 void Visit(const koopa_raw_jump_t &jump);
+void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value);
 
 void libkoopa_string2rawprog_and_visit(const char *str){
     koopa_program_t program;
@@ -103,6 +104,7 @@ void Visit(const koopa_raw_function_t &func){
     std::cout << "\t.globl " << func->name + 1 << std::endl;
     std::cout << func->name + 1 << ": " << std::endl;
 
+    /* Prologue */
     size_t frame_size = map_frame2size[frame];
     if(frame_size > STACK_IMM_NEG_MAX){
         /* TODO : li IMM to t0, add sp with t0 */
@@ -110,6 +112,9 @@ void Visit(const koopa_raw_function_t &func){
     }
     else{
         std::cout << "\taddi\tsp, sp, " << -(int)frame_size << std::endl;
+        if(map_frame2is_with_call[frame]){
+            std::cout << "\tsw\tra, " << frame_size - 4 << "(sp)" << std::endl;
+        }
     }
 
     Visit(func->bbs);
@@ -160,6 +165,10 @@ void Visit(const koopa_raw_value_t &value){
     case KOOPA_RVT_JUMP:
         Visit(kind.data.jump);
         break;
+    case KOOPA_RVT_CALL:
+        Visit(kind.data.call, value);
+        /* TODO */
+        break;
     default:
         /*TODO: Other raw value types*/
         std::cerr << kind.tag << std::endl;
@@ -203,6 +212,9 @@ void Visit(const koopa_raw_return_t &ret){
         assert(false);
     }
     else{
+        if(map_frame2is_with_call[frame]){
+            std::cout << "\tlw\tra, " << frame_size - 4 << "(sp)" << std::endl;
+        }
         std::cout << "\taddi\tsp, sp, " << frame_size << std::endl;
     }
     std::cout << "\tret" << std::endl;
@@ -377,34 +389,73 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
 }
 
 void Visit(const koopa_raw_store_t &store){
-    if(store.value->kind.tag == KOOPA_RVT_INTEGER){
-        Visit(store.value->kind.data.integer);
-        register_counter--;
+    if(store.value->kind.tag == KOOPA_RVT_FUNC_ARG_REF){
+        size_t idx = store.value->kind.data.func_arg_ref.index;
+        if(idx < 8){
+            int offset_dest = (*frame)[store.dest].offset;
+            assert(offset_dest >= 0);
+            if(offset_dest > STACK_IMM_POS_MAX){
+                /* TODO */
+                assert(false);
+            }
+            else{
+                std::cout << "\tsw\ta" << idx << ", ";
+                std::cout << offset_dest << "(sp)" << std::endl;
+            }
+        }
+        else{
+            size_t frame_size = map_frame2size[frame];
+            idx -= 8;
+            int offset_src = frame_size + idx * 4;
+            std::cout << "\tlw\tt" << register_counter << ", ";
+            std::cout << offset_src << "(sp)" << std::endl;
+
+            int offset_dest = (*frame)[store.dest].offset;
+            assert(offset_dest >= 0);
+            if(offset_dest > STACK_IMM_POS_MAX){
+                /* TODO */
+                assert(false);
+            }
+            else{
+                std::cout << "\tsw\tt" << register_counter << ", ";
+                std::cout << offset_dest << "(sp)" << std::endl;
+            }
+        }
     }
     else{
-        assert((*frame).find(store.value) != (*frame).end());
-        int offset_src = (*frame)[store.value].offset;
-        assert(offset_src >= 0);
-        if(offset_src > STACK_IMM_POS_MAX){
+        if(store.value->kind.tag == KOOPA_RVT_INTEGER){
+            Visit(store.value->kind.data.integer);
+            register_counter--;
+        }
+        else{
+
+            std::cerr << store.value->kind.tag << ","
+                << store.value->name  << ","
+                << store.value->ty->tag << "\n";
+            assert((*frame).find(store.value) != (*frame).end());
+            int offset_src = (*frame)[store.value].offset;
+            assert(offset_src >= 0);
+            if(offset_src > STACK_IMM_POS_MAX){
+                /* TODO */
+                assert(false);
+            }
+            else{
+                std::cout << "\tlw\t" << "t" << register_counter << ", ";
+                std::cout << offset_src << "(sp)" << std::endl;
+            }
+        }
+
+        // assert((*frame).find(store.dest) != (*frame).end());
+        int offset_dest = (*frame)[store.dest].offset;
+        assert(offset_dest >= 0);
+        if(offset_dest > STACK_IMM_POS_MAX){
             /* TODO */
             assert(false);
         }
         else{
-            std::cout << "\tlw\t" << "t" << register_counter << ", ";
-            std::cout << offset_src << "(sp)" << std::endl;
+            std::cout << "\tsw\t" << "t" << register_counter << ", ";
+            std::cout << offset_dest << "(sp)" << std::endl;
         }
-    }
-
-    // assert((*frame).find(store.dest) != (*frame).end());
-    int offset_dest = (*frame)[store.dest].offset;
-    assert(offset_dest >= 0);
-    if(offset_dest > STACK_IMM_POS_MAX){
-        /* TODO */
-        assert(false);
-    }
-    else{
-        std::cout << "\tsw\t" << "t" << register_counter << ", ";
-        std::cout << offset_dest << "(sp)" << std::endl;
     }
 }
 
@@ -462,4 +513,81 @@ void Visit(const koopa_raw_branch_t &branch){
 
 void Visit(const koopa_raw_jump_t &jump){
     std::cout << "\tj\t" << jump.target->name + 1 << std::endl;
+}
+
+void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
+    uint32_t idx, len;
+
+    assert(call.args.kind == KOOPA_RSIK_VALUE);
+    len = call.args.len;
+    for(idx = 0; idx < len; ++idx){
+        auto param = reinterpret_cast<koopa_raw_value_t>(call.args.buffer[idx]);
+        if(idx < 8){
+            if(param->kind.tag == KOOPA_RVT_INTEGER){
+                /* TODO: save the previous value in a[0-7]? */
+                std::cout << "\tli\ta" << idx << ", ";
+                std::cout << param->kind.data.integer.value << std::endl;
+            }
+            else{
+                assert((*frame).find(param) != (*frame).end());
+                int offset_param = (*frame)[param].offset;
+                assert(offset_param >= 0);
+                if(offset_param > STACK_IMM_POS_MAX){
+                    /* TODO */
+                    assert(false);
+                }
+                else{
+                    std::cout << "\tlw\ta" << idx << ", ";
+                    std::cout << offset_param << "(sp)" << std::endl;
+                }
+            }
+        }
+        else{
+            if(param->kind.tag == KOOPA_RVT_INTEGER){
+                std::cout << "\tli\tt" << register_counter << ", ";
+                std::cout << param->kind.data.integer.value << std::endl;
+
+                int offset_dest = (idx - 8) * 4;
+                if(offset_dest > STACK_IMM_POS_MAX){
+                    /* TODO */
+                    assert(false);
+                }
+                else{
+                    std::cout << "\tsw\tt" << register_counter << ", ";
+                    std::cout << offset_dest << "(sp)" << std::endl;
+                }
+            }
+            else{
+                assert((*frame).find(param) != (*frame).end());
+                int offset_param = (*frame)[param].offset;
+                assert(offset_param >= 0);
+                if(offset_param > STACK_IMM_POS_MAX){
+                    /* TODO */
+                    assert(false);
+                }
+                else{
+                    std::cout << "\tlw\tt" << register_counter << ", ";
+                    std::cout << offset_param << "(sp)" << std::endl;
+                }
+
+                int offset_dest = (idx - 8) * 4;
+                if(offset_dest > STACK_IMM_POS_MAX){
+                    /* TODO */
+                    assert(false);
+                }
+                else{
+                    std::cout << "\tsw\tt" << register_counter << ", ";
+                    std::cout << offset_dest << "(sp)" << std::endl;
+                }
+            }
+        }
+    }
+    std::cout << "\tcall\t" << call.callee->name + 1 << std::endl;
+
+    if(value->ty->tag != KOOPA_RTT_UNIT){
+        assert((*frame).find(value) != (*frame).end());
+        int offset_dest = (*frame)[value].offset;
+        std::cout << "\tsw\ta0" << ", ";
+        std::cout << offset_dest << "(sp)" << std::endl;
+    }
 }

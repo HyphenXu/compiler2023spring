@@ -119,6 +119,7 @@ public:
 
     void Dump() const override{
         comp_units->Dump();
+        std::cout << std::endl;
     }
 
     void Dump2StringIR(void *aux) const override {
@@ -168,7 +169,6 @@ public:
         std::cout << "CompUnitAST { ";
         func_def->Dump();
         std::cout << " }";
-        std::cout << std::endl;
     }
 
     void Dump2StringIR(void *aux) const override {
