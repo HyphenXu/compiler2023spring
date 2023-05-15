@@ -358,14 +358,14 @@ GeneralStmt
         ast->stmt = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
-    | WHILE '(' Exp ')' GeneralStmt {
+    /* | WHILE '(' Exp ')' GeneralStmt {
         auto ast = new GeneralStmtAST();
         ast->rule = 3;
         ast->while_id = while_id++;
         ast->exp = unique_ptr<BaseAST>($3);
         ast->stmt = unique_ptr<BaseAST>($5);
         $$ = ast;
-    }
+    } */
     ;
 
 Stmt
@@ -417,6 +417,14 @@ Stmt
         ast->stmt_false = unique_ptr<BaseAST>($7);
         $$ = ast;
     }
+    | WHILE '(' Exp ')' Stmt {
+        auto ast = new StmtAST();
+        ast->rule = 6;
+        ast->while_id = while_id++;
+        ast->exp = unique_ptr<BaseAST>($3);
+        ast->stmt_body = unique_ptr<BaseAST>($5);
+        $$ = ast;
+    }
     | BREAK ';' {
         auto ast = new StmtAST();
         ast->rule = 7;
@@ -432,6 +440,7 @@ Stmt
 OpenStmt
     : IF '(' Exp ')' GeneralStmt {
         auto ast = new OpenStmtAST();
+        ast->rule = 1;
         ast->if_stmt_id = if_id++;
         ast->is_with_else = false;
         ast->exp = unique_ptr<BaseAST>($3);
@@ -440,11 +449,20 @@ OpenStmt
     }
     | IF '(' Exp ')' Stmt ELSE OpenStmt {
         auto ast = new OpenStmtAST();
+        ast->rule = 2;
         ast->if_stmt_id = if_id++;
         ast->is_with_else = true;
         ast->exp = unique_ptr<BaseAST>($3);
         ast->stmt_true = unique_ptr<BaseAST>($5);
         ast->stmt_false = unique_ptr<BaseAST>($7);
+        $$ = ast;
+    }
+    | WHILE '(' Exp ')' OpenStmt {
+        auto ast = new OpenStmtAST();
+        ast->rule = 3;
+        ast->while_id = while_id++;
+        ast->exp = unique_ptr<BaseAST>($3);
+        ast->stmt_body = unique_ptr<BaseAST>($5);
         $$ = ast;
     }
     ;

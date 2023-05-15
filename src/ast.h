@@ -785,32 +785,7 @@ public:
     void Dump2StringIR(void *aux) const override {
         // stmt_result_t *last_stmt_result = (stmt_result_t *)aux;
         if(rule == 3){
-            exp_result_t exp_result;
-            // stmt_result_t stmt_body_result;
 
-            stack_while_id.push(while_id);
-
-            std::cout << "\tjump %while_cond_" << while_id << std::endl;
-
-            std::cout << "%while_cond_" << while_id << ":" << std::endl;
-            exp->Dump2StringIR(&exp_result);
-            if(exp_result.depth == 0){
-                std::cout << "\tbr " << exp_result.result_number << ", ";
-            }
-            else{
-                std::cout << "\tbr %" << exp_result.result_id << ", ";
-            }
-            std::cout << "%while_body_" << while_id << ", ";
-            std::cout << "%while_end_" << while_id << std::endl;
-
-            std::cout << "%while_body_" << while_id << ":" << std::endl;
-            /* TODO: emmm, stmt_result_t seems unnecessary now? */
-            stmt->Dump2StringIR(nullptr);
-            std::cout << "\tjump %while_cond_" << while_id << std::endl;
-
-            std::cout << "%while_end_" << while_id << ":" << std::endl;
-
-            stack_while_id.pop();
         }
         else{
             stmt->Dump2StringIR(nullptr);
@@ -984,6 +959,34 @@ public:
             // }
 
         }
+        else if(rule == 6){
+            exp_result_t exp_result;
+            // stmt_result_t stmt_body_result;
+
+            stack_while_id.push(while_id);
+
+            std::cout << "\tjump %while_cond_" << while_id << std::endl;
+
+            std::cout << "%while_cond_" << while_id << ":" << std::endl;
+            exp->Dump2StringIR(&exp_result);
+            if(exp_result.depth == 0){
+                std::cout << "\tbr " << exp_result.result_number << ", ";
+            }
+            else{
+                std::cout << "\tbr %" << exp_result.result_id << ", ";
+            }
+            std::cout << "%while_body_" << while_id << ", ";
+            std::cout << "%while_end_" << while_id << std::endl;
+
+            std::cout << "%while_body_" << while_id << ":" << std::endl;
+            /* TODO: emmm, stmt_result_t seems unnecessary now? */
+            stmt_body->Dump2StringIR(nullptr);
+            std::cout << "\tjump %while_cond_" << while_id << std::endl;
+
+            std::cout << "%while_end_" << while_id << ":" << std::endl;
+
+            stack_while_id.pop();
+        }
         else if(rule == 7){
             assert(!stack_while_id.empty());
             int target = stack_while_id.top();
@@ -1014,9 +1017,12 @@ class OpenStmtAST : public BaseAST {
 public:
     bool is_with_else;
     int if_stmt_id;
+    int rule;
+    int while_id;
     std::unique_ptr<BaseAST> exp;
     std::unique_ptr<BaseAST> stmt_true;
     std::unique_ptr<BaseAST> stmt_false;
+    std::unique_ptr<BaseAST> stmt_body;
 
     void Dump() const override {
         std::cout << "OpenStmtAST { ";
@@ -1033,63 +1039,93 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        // stmt_result_t *stmt_result = (stmt_result_t *)aux;
-        // if(stmt_result != nullptr){
-        //     // stmt_result->is_end_with_ret = false;
-        //     stmt_result->is_end_with_if = true;
-        // }
+        if(rule == 3){
+            exp_result_t exp_result;
+            // stmt_result_t stmt_body_result;
 
-        // stmt_result_t stmt_result_1, stmt_result_2;
-        exp_result_t exp_result;
-        exp->Dump2StringIR(&exp_result);
-        if(exp_result.depth != 0){
-            std::cout << "\tbr %" << exp_result.result_id << ", ";
+            stack_while_id.push(while_id);
+
+            std::cout << "\tjump %while_cond_" << while_id << std::endl;
+
+            std::cout << "%while_cond_" << while_id << ":" << std::endl;
+            exp->Dump2StringIR(&exp_result);
+            if(exp_result.depth == 0){
+                std::cout << "\tbr " << exp_result.result_number << ", ";
+            }
+            else{
+                std::cout << "\tbr %" << exp_result.result_id << ", ";
+            }
+            std::cout << "%while_body_" << while_id << ", ";
+            std::cout << "%while_end_" << while_id << std::endl;
+
+            std::cout << "%while_body_" << while_id << ":" << std::endl;
+            /* TODO: emmm, stmt_result_t seems unnecessary now? */
+            stmt_body->Dump2StringIR(nullptr);
+            std::cout << "\tjump %while_cond_" << while_id << std::endl;
+
+            std::cout << "%while_end_" << while_id << ":" << std::endl;
+
+            stack_while_id.pop();
         }
         else{
-            std::cout << "\tbr " << exp_result.result_number << ", ";
-        }
-        std::cout << "%then_" << if_stmt_id << ", ";
-        if(is_with_else){
-            std::cout << "%else_" << if_stmt_id << std::endl;
-        }
-        else{
-            std::cout << "%end_" << if_stmt_id << std::endl;
-        }
-
-        std::cout << "%then_" << if_stmt_id << ":" << std::endl;
-        stmt_true->Dump2StringIR(nullptr);
-
-        if(is_with_else){
-            // if(!stmt_result_1.is_end_with_ret){
-                std::cout << "\tjump %end_" << if_stmt_id << std::endl;
+            // stmt_result_t *stmt_result = (stmt_result_t *)aux;
+            // if(stmt_result != nullptr){
+            //     // stmt_result->is_end_with_ret = false;
+            //     stmt_result->is_end_with_if = true;
             // }
 
-            std::cout << "%else_" << if_stmt_id << ":" << std::endl;
-            stmt_false->Dump2StringIR(nullptr);
-            // if(!stmt_result_2.is_end_with_ret || stmt_result_2.is_end_with_if){
-                std::cout << "\tjump %end_" << if_stmt_id << std::endl;
-            // }
+            // stmt_result_t stmt_result_1, stmt_result_2;
+            exp_result_t exp_result;
+            exp->Dump2StringIR(&exp_result);
+            if(exp_result.depth != 0){
+                std::cout << "\tbr %" << exp_result.result_id << ", ";
+            }
+            else{
+                std::cout << "\tbr " << exp_result.result_number << ", ";
+            }
+            std::cout << "%then_" << if_stmt_id << ", ";
+            if(is_with_else){
+                std::cout << "%else_" << if_stmt_id << std::endl;
+            }
+            else{
+                std::cout << "%end_" << if_stmt_id << std::endl;
+            }
 
-            // if(!(stmt_result_1.is_end_with_ret && stmt_result_2.is_end_with_ret)){
+            std::cout << "%then_" << if_stmt_id << ":" << std::endl;
+            stmt_true->Dump2StringIR(nullptr);
+
+            if(is_with_else){
+                // if(!stmt_result_1.is_end_with_ret){
+                    std::cout << "\tjump %end_" << if_stmt_id << std::endl;
+                // }
+
+                std::cout << "%else_" << if_stmt_id << ":" << std::endl;
+                stmt_false->Dump2StringIR(nullptr);
+                // if(!stmt_result_2.is_end_with_ret || stmt_result_2.is_end_with_if){
+                    std::cout << "\tjump %end_" << if_stmt_id << std::endl;
+                // }
+
+                // if(!(stmt_result_1.is_end_with_ret && stmt_result_2.is_end_with_ret)){
+                    std::cout << "%end_" << if_stmt_id << ":" << std::endl;
+                // }
+
+                // if(stmt_result != nullptr){
+                //     stmt_result->is_end_with_ret = stmt_result_1.is_end_with_ret
+                //                                 && stmt_result_2.is_end_with_ret;
+                // }
+            }
+            else{
+                // if(!stmt_result_1.is_end_with_ret || stmt_result_1.is_end_with_if){
+                    std::cout << "\tjump %end_" << if_stmt_id << std::endl;
+                // }
+
+                // if(!stmt_result_1.is_end_with_ret){
                 std::cout << "%end_" << if_stmt_id << ":" << std::endl;
-            // }
-
-            // if(stmt_result != nullptr){
-            //     stmt_result->is_end_with_ret = stmt_result_1.is_end_with_ret
-            //                                 && stmt_result_2.is_end_with_ret;
-            // }
-        }
-        else{
-            // if(!stmt_result_1.is_end_with_ret || stmt_result_1.is_end_with_if){
-                std::cout << "\tjump %end_" << if_stmt_id << std::endl;
-            // }
-
-            // if(!stmt_result_1.is_end_with_ret){
-            std::cout << "%end_" << if_stmt_id << ":" << std::endl;
-            // }
-            // if(stmt_result != nullptr){
-            //     stmt_result->is_end_with_ret = stmt_result_1.is_end_with_ret;
-            // }
+                // }
+                // if(stmt_result != nullptr){
+                //     stmt_result->is_end_with_ret = stmt_result_1.is_end_with_ret;
+                // }
+            }
         }
     }
 };
