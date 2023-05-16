@@ -16,7 +16,6 @@ using namespace std;
 /* Whitespace and Comment */
 WhiteSpace      [ \t\n\r]*
 LineComment     "//".*
-/* TODO: BLOCK COMMENT */
 BlockComment    \/\*([^\*]|(\*+[^\*\/]))*\*+\/
 
 /* Identifier */
@@ -61,7 +60,6 @@ LogicOr         "||"
 {UnorderedCompOp}   { yylval.str_val = new string(yytext); return UNORDEREDCOMPOP; }
 {LogicAnd}          { yylval.str_val = new string(yytext); return LOGICAND; }
 {LogicOr}           { yylval.str_val = new string(yytext); return LOGICOR; }
-
 
 .               { return yytext[0]; }
 

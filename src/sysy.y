@@ -1,4 +1,4 @@
-/* Options */
+/* Options; for header file */
 %code requires {
     #include <memory>
     #include <string>
@@ -6,10 +6,12 @@
 }
 
 %{
-#include <iostream>
+/* This part is for source code, instead of header file. */
 #include <memory>
 #include <string>
 #include "ast.h"
+
+#include <iostream>
 #include <vector>
 
 /* Necessary declarations. */
@@ -18,7 +20,7 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 
 using namespace std;
 
-static int block_id = 1; /* Global is ZERO */
+static int block_id = 1; /* Global block is ZERO */
 static int if_id = 0;
 static int ret_id = 0;
 static int l_or_exp_id = 0;
@@ -36,6 +38,7 @@ static int while_id = 0;
  *  Lexer will use them.
  */
 %union {
+    // TA's words:
     // 至于为什么要用字符串指针而不直接用 string 或者 unique_ptr<string>
     // 请自行 STFW 在 union 里写一个带析构函数的类会出现什么情况
     std::string *str_val;
@@ -51,17 +54,24 @@ static int while_id = 0;
 %token  <str_val>   ORDEREDCOMPOP UNORDEREDCOMPOP LOGICAND LOGICOR
 
 /* Define the types of non-terminators */
+%type <ast_val> StartSymbol
+
 %type <ast_val> CompUnits CompUnit
+
 %type <ast_val> Decl
 %type <ast_val> ConstDecl ConstDefs ConstDef ConstInitVal
 %type <ast_val> VarDecl VarDefs VarDef InitVal
+
 %type <ast_val> FuncDef FuncFParams FuncFParam
+
 %type <ast_val> Block BlockItems BlockItem GeneralStmt Stmt OpenStmt
+
 %type <ast_val> Exp
 %type <ast_val> LVal
-%type <ast_val> PrimaryExp UnaryExp FuncRParams MulExp AddExp
-%type <ast_val> RelExp EqExp LAndExp LOrExp
+%type <ast_val> PrimaryExp UnaryExp FuncRParams
+%type <ast_val> MulExp AddExp RelExp EqExp LAndExp LOrExp
 %type <ast_val> ConstExp
+
 %type <int_val> Number
 %type <str_val> UnaryOp
 
@@ -69,14 +79,7 @@ static int while_id = 0;
 
 %%
 
-/* Part 1: CompUnit */
-/** The basic semantics here is: after CompUnit is parsed, what shall be
- *  done with the return value of parsing FuncDef, and what shall be
- *  returned to the caller of this parser, with the pre-defined
- *  <%parse-param> "ast".
- *  $1 here is 'the return value of the first symbol'
- */
-
+/* Part 0: StartSymbol */
 StartSymbol
     : CompUnits {
         auto start_symbol = make_unique<StartSymbolAST>();
@@ -85,6 +88,7 @@ StartSymbol
     }
     ;
 
+/* Part 1: CompUnit */
 CompUnits
     : CompUnits CompUnit {
         auto ast = reinterpret_cast<CompUnitsAST *>($1);
@@ -98,20 +102,23 @@ CompUnits
     }
     ;
 
+/** The basic semantics here is: after CompUnit is parsed, what shall be
+ *  done with the return value of parsing FuncDef, and what shall be
+ *  returned to the caller of this parser, with the pre-defined
+ *  <%parse-param> "ast".
+ *  $1 here is 'the return value of the first symbol'
+ */
 CompUnit
     : FuncDef {
-        // auto comp_unit = make_unique<CompUnitAST>();
-        // comp_unit->func_def = unique_ptr<BaseAST>($1);
-        // ast = move(comp_unit);
         auto ast = new CompUnitAST();
-        ast->is_func_def = true;
-        ast->unit = unique_ptr<BaseAST>($1);
+        ast->type = COMP_UNIT_FUNC_DEF;
+        ast->comp_unit = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | Decl {
         auto ast = new CompUnitAST();
-        ast->is_func_def = false;
-        ast->unit = unique_ptr<BaseAST>($1);
+        ast->type = COMP_UNIT_DECL;
+        ast->comp_unit = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     ;
@@ -120,13 +127,13 @@ CompUnit
 Decl
     : ConstDecl {
         auto ast = new DeclAST();
-        ast->is_const_decl = true;
+        ast->type = DECL_CONST_DECL;
         ast->decl = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | VarDecl {
         auto ast = new DeclAST();
-        ast->is_const_decl = false;
+        ast->type = DECL_VAR_DECL;
         ast->decl = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
@@ -139,14 +146,6 @@ ConstDecl
         ast->const_defs = unique_ptr<BaseAST>($3);
         $$ = ast;
     };
-
-/* BType
-    : INT {
-        auto ast = new BTypeAST();
-        ast->type_string = string("int");
-        $$ = ast;
-    }
-    ; */
 
 ConstDefs
     : ConstDefs ',' ConstDef {
@@ -266,19 +265,6 @@ FuncDef
     }
     ;
 
-/* FuncType
-    : INT {
-        auto ast = new FuncTypeAST();
-        ast->type_string = string("int");
-        $$ = ast;
-    }
-    | VOID {
-        auto ast = new FuncTypeAST();
-        ast->type_string = string("void");
-        $$ = ast;
-    }
-    ; */
-
 FuncFParams
     : FuncFParams ',' FuncFParam {
         auto ast = reinterpret_cast<FuncFParamsAST *>($1);
@@ -333,13 +319,13 @@ BlockItems
 BlockItem
     : Decl {
         auto ast = new BlockItemAST();
-        ast->is_stmt = false;
+        ast->type = BLOCK_ITEM_DECL;
         ast->item = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | GeneralStmt {
         auto ast = new BlockItemAST();
-        ast->is_stmt = true;
+        ast->type = BLOCK_ITEM_GENERAL_STMT;
         ast->item = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
@@ -348,69 +334,61 @@ BlockItem
 GeneralStmt
     : Stmt {
         auto ast = new GeneralStmtAST();
-        ast->rule = 1;
+        ast->type = GENERAL_STMT_STMT;
         ast->stmt = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | OpenStmt {
         auto ast = new GeneralStmtAST();
-        ast->rule = 2;
+        ast->type = GENERAL_STMT_OPEN_STMT;
         ast->stmt = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
-    /* | WHILE '(' Exp ')' GeneralStmt {
-        auto ast = new GeneralStmtAST();
-        ast->rule = 3;
-        ast->while_id = while_id++;
-        ast->exp = unique_ptr<BaseAST>($3);
-        ast->stmt = unique_ptr<BaseAST>($5);
-        $$ = ast;
-    } */
     ;
 
 Stmt
     : LVal '=' Exp ';' {
         auto ast = new StmtAST();
-        ast->rule = 1;
+        ast->type = STMT_ASSIGN;
         ast->l_val = unique_ptr<BaseAST>($1);
         ast->exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     | Exp ';' {
         auto ast = new StmtAST();
-        ast->rule = 2;
+        ast->type = STMT_EXP;
         ast->exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | ';' {
         auto ast = new StmtAST();
-        ast->rule = 2;
+        ast->type = STMT_EXP;
         ast->exp = nullptr;
         $$ = ast;
     }
     | Block {
         auto ast = new StmtAST();
-        ast->rule = 3;
+        ast->type = STMT_BLOCK;
         ast->block = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | RETURN Exp ';' {
         auto ast = new StmtAST();
-        ast->rule = 4;
+        ast->type = STMT_RETURN;
         ast->ret_id = ret_id++;
         ast->exp = unique_ptr<BaseAST>($2);
         $$ = ast;
     }
     | RETURN ';' {
         auto ast = new StmtAST();
-        ast->rule = 4;
+        ast->type = STMT_RETURN;
         ast->ret_id = ret_id++;
         ast->exp = nullptr;
         $$ = ast;
     }
     | IF '(' Exp ')' Stmt ELSE Stmt {
         auto ast = new StmtAST();
-        ast->rule = 5;
+        ast->type = STMT_IF_STMT;
         ast->if_stmt_id = if_id++;
         ast->exp = unique_ptr<BaseAST>($3);
         ast->stmt_true = unique_ptr<BaseAST>($5);
@@ -419,7 +397,7 @@ Stmt
     }
     | WHILE '(' Exp ')' Stmt {
         auto ast = new StmtAST();
-        ast->rule = 6;
+        ast->type = STMT_WHILE_STMT;
         ast->while_id = while_id++;
         ast->exp = unique_ptr<BaseAST>($3);
         ast->stmt_body = unique_ptr<BaseAST>($5);
@@ -427,12 +405,12 @@ Stmt
     }
     | BREAK ';' {
         auto ast = new StmtAST();
-        ast->rule = 7;
+        ast->type = STMT_BREAK;
         $$ = ast;
     }
     | CONTINUE ';' {
         auto ast = new StmtAST();
-        ast->rule = 8;
+        ast->type = STMT_CONTINUE;
         $$ = ast;
     }
     ;
@@ -440,18 +418,16 @@ Stmt
 OpenStmt
     : IF '(' Exp ')' GeneralStmt {
         auto ast = new OpenStmtAST();
-        ast->rule = 1;
+        ast->type = OPEN_STMT_IF_GENERAL_STMT;
         ast->if_stmt_id = if_id++;
-        ast->is_with_else = false;
         ast->exp = unique_ptr<BaseAST>($3);
         ast->stmt_true = unique_ptr<BaseAST>($5);
         $$ = ast;
     }
     | IF '(' Exp ')' Stmt ELSE OpenStmt {
         auto ast = new OpenStmtAST();
-        ast->rule = 2;
+        ast->type = OPEN_STMT_IF_STMT_OPEN_STMT;
         ast->if_stmt_id = if_id++;
-        ast->is_with_else = true;
         ast->exp = unique_ptr<BaseAST>($3);
         ast->stmt_true = unique_ptr<BaseAST>($5);
         ast->stmt_false = unique_ptr<BaseAST>($7);
@@ -459,7 +435,7 @@ OpenStmt
     }
     | WHILE '(' Exp ')' OpenStmt {
         auto ast = new OpenStmtAST();
-        ast->rule = 3;
+        ast->type = OPEN_STMT_WHILE_OPEN_STMT;
         ast->while_id = while_id++;
         ast->exp = unique_ptr<BaseAST>($3);
         ast->stmt_body = unique_ptr<BaseAST>($5);
@@ -471,7 +447,7 @@ OpenStmt
 Exp
     : LOrExp {
         auto ast = new ExpAST();
-        ast->lorexp = unique_ptr<BaseAST>($1);
+        ast->l_or_exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     ;
@@ -487,19 +463,19 @@ LVal
 PrimaryExp
     : '(' Exp ')' {
         auto ast = new PrimaryExpAST();
-        ast->rule = 1;
+        ast->type = PRIMARY_EXP_EXP;
         ast->exp = unique_ptr<BaseAST>($2);
         $$ = ast;
     }
     | LVal {
         auto ast = new PrimaryExpAST();
-        ast->rule = 3;
+        ast->type = PRIMARY_EXP_L_VAL;
         ast->l_val = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | Number {
         auto ast = new PrimaryExpAST();
-        ast->rule = 2;
+        ast->type = PRIMARY_EXP_NUMBER;
         ast->number = $1;
         $$ = ast;
     }
@@ -514,27 +490,27 @@ Number
 UnaryExp
     : PrimaryExp {
         auto ast = new UnaryExpAST();
-        ast->rule = 1;
-        ast->primaryexp = unique_ptr<BaseAST>($1);
+        ast->type = UNARY_EXP_PRIMARY_EXP;
+        ast->primary_exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | UnaryOp UnaryExp {
         auto ast = new UnaryExpAST();
-        ast->rule = 2;
-        ast->unaryop = *unique_ptr<string>($1);
-        ast->unaryexp = unique_ptr<BaseAST>($2);
+        ast->type = UNARY_EXP_UNARY_OP_EXP;
+        ast->unary_op = *unique_ptr<string>($1);
+        ast->unary_exp = unique_ptr<BaseAST>($2);
         $$ = ast;
     }
     | IDENT '(' ')' {
         auto ast = new UnaryExpAST();
-        ast->rule = 3;
+        ast->type = UNARY_EXP_FUNCTION_CALL;
         ast->ident = *unique_ptr<string>($1);
         ast->func_r_params = nullptr;
         $$ = ast;
     }
     | IDENT '(' FuncRParams ')' {
         auto ast = new UnaryExpAST();
-        ast->rule = 3;
+        ast->type = UNARY_EXP_FUNCTION_CALL;
         ast->ident = *unique_ptr<string>($1);
         ast->func_r_params = unique_ptr<BaseAST>($3);
         $$ = ast;
@@ -563,32 +539,32 @@ FuncRParams
 MulExp
     : UnaryExp {
         auto ast = new MulExpAST();
-        ast->rule = 1;
-        ast->unaryexp = unique_ptr<BaseAST>($1);
+        ast->type = MUL_EXP_UNARY;
+        ast->unary_exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | MulExp '*' UnaryExp {
         auto ast = new MulExpAST();
-        ast->rule = 2;
-        ast->mulexp = unique_ptr<BaseAST>($1);
+        ast->type = MUL_EXP_MUL;
+        ast->mul_exp = unique_ptr<BaseAST>($1);
         ast->op = "*";
-        ast->unaryexp = unique_ptr<BaseAST>($3);
+        ast->unary_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     | MulExp '/' UnaryExp {
         auto ast = new MulExpAST();
-        ast->rule = 3;
-        ast->mulexp = unique_ptr<BaseAST>($1);
+        ast->type = MUL_EXP_DIV;
+        ast->mul_exp = unique_ptr<BaseAST>($1);
         ast->op = "/";
-        ast->unaryexp = unique_ptr<BaseAST>($3);
+        ast->unary_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     | MulExp '%' UnaryExp {
         auto ast = new MulExpAST();
-        ast->rule = 4;
-        ast->mulexp = unique_ptr<BaseAST>($1);
+        ast->type = MUL_EXP_MOD;
+        ast->mul_exp = unique_ptr<BaseAST>($1);
         ast->op = "%";
-        ast->unaryexp = unique_ptr<BaseAST>($3);
+        ast->unary_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     ;
@@ -596,56 +572,56 @@ MulExp
 AddExp
     : MulExp {
         auto ast = new AddExpAST();
-        ast->rule = 1;
-        ast->mulexp = unique_ptr<BaseAST>($1);
+        ast->type = ADD_EXP_MUL;
+        ast->mul_exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | AddExp '+' MulExp {
         auto ast = new AddExpAST();
-        ast->rule = 2;
-        ast->addexp = unique_ptr<BaseAST>($1);
+        ast->type = ADD_EXP_ADD;
+        ast->add_exp = unique_ptr<BaseAST>($1);
         ast->op = "+";
-        ast->mulexp = unique_ptr<BaseAST>($3);
+        ast->mul_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     | AddExp '-' MulExp {
         auto ast = new AddExpAST();
-        ast->rule = 3;
-        ast->addexp = unique_ptr<BaseAST>($1);
+        ast->type = ADD_EXP_SUB;
+        ast->add_exp = unique_ptr<BaseAST>($1);
         ast->op = "-";
-        ast->mulexp = unique_ptr<BaseAST>($3);
+        ast->mul_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     };
 
 RelExp
     : AddExp {
         auto ast = new RelExpAST();
-        ast->rule = 1;
-        ast->addexp = unique_ptr<BaseAST>($1);
+        ast->type = REL_EXP_ADD;
+        ast->add_exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | RelExp '<' AddExp {
         auto ast = new RelExpAST();
-        ast->rule = 2;
-        ast->relexp = unique_ptr<BaseAST>($1);
+        ast->type = REL_EXP_LT;
+        ast->rel_exp = unique_ptr<BaseAST>($1);
         ast->op = "<";
-        ast->addexp = unique_ptr<BaseAST>($3);
+        ast->add_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     | RelExp '>' AddExp {
         auto ast = new RelExpAST();
-        ast->rule = 3;
-        ast->relexp = unique_ptr<BaseAST>($1);
+        ast->type = REL_EXP_GT;
+        ast->rel_exp = unique_ptr<BaseAST>($1);
         ast->op = ">";
-        ast->addexp = unique_ptr<BaseAST>($3);
+        ast->add_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     | RelExp ORDEREDCOMPOP AddExp {
         auto ast = new RelExpAST();
-        ast->rule = 4;
-        ast->relexp = unique_ptr<BaseAST>($1);
+        ast->type = REL_EXP_ORDERED;
+        ast->rel_exp = unique_ptr<BaseAST>($1);
         ast->op = *unique_ptr<string>($2);
-        ast->addexp = unique_ptr<BaseAST>($3);
+        ast->add_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     ;
@@ -653,16 +629,16 @@ RelExp
 EqExp
     : RelExp {
         auto ast = new EqExpAST();
-        ast->rule = 1;
-        ast->relexp = unique_ptr<BaseAST>($1);
+        ast->type = EQ_EXP_REL;
+        ast->rel_exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | EqExp UNORDEREDCOMPOP RelExp {
         auto ast = new EqExpAST();
-        ast->rule = 2;
-        ast->eqexp = unique_ptr<BaseAST>($1);
+        ast->type = EQ_EXP_UNORDERED;
+        ast->eq_exp = unique_ptr<BaseAST>($1);
         ast->op = *unique_ptr<string>($2);
-        ast->relexp = unique_ptr<BaseAST>($3);
+        ast->rel_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     ;
@@ -670,18 +646,18 @@ EqExp
 LAndExp
     : EqExp {
         auto ast = new LAndExpAST();
-        ast->rule = 1;
+        ast->type = L_AND_EXP_EQ;
         ast->id = l_and_exp_id++;
-        ast->eqexp = unique_ptr<BaseAST>($1);
+        ast->eq_exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | LAndExp LOGICAND EqExp {
         auto ast = new LAndExpAST();
-        ast->rule = 2;
+        ast->type = L_AND_EXP_L_AND;
         ast->id = l_and_exp_id++;
-        ast->landexp = unique_ptr<BaseAST>($1);
+        ast->l_and_exp = unique_ptr<BaseAST>($1);
         ast->op = *unique_ptr<string>($2);
-        ast->eqexp = unique_ptr<BaseAST>($3);
+        ast->eq_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     ;
@@ -689,18 +665,18 @@ LAndExp
 LOrExp
     : LAndExp {
         auto ast = new LOrExpAST();
-        ast->rule = 1;
+        ast->type = L_OR_EXP_L_AND;
         ast->id = l_or_exp_id++;
-        ast->landexp = unique_ptr<BaseAST>($1);
+        ast->l_and_exp = unique_ptr<BaseAST>($1);
         $$ = ast;
     }
     | LOrExp LOGICOR LAndExp {
         auto ast = new LOrExpAST();
-        ast->rule = 2;
+        ast->type = L_OR_EXP_L_OR;
         ast->id = l_or_exp_id++;
-        ast->lorexp = unique_ptr<BaseAST>($1);
+        ast->l_or_exp = unique_ptr<BaseAST>($1);
         ast->op = *unique_ptr<string>($2);
-        ast->landexp = unique_ptr<BaseAST>($3);
+        ast->l_and_exp = unique_ptr<BaseAST>($3);
         $$ = ast;
     }
     ;

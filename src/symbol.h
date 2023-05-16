@@ -4,9 +4,11 @@
 #include <map>
 #include <string>
 #include <cassert>
+#include <stack>
+#include <iostream>
 
 typedef enum {
-    SYMBOL_TYPE_NST_INT,
+    SYMBOL_TYPE_CONST_INT,
     SYMBOL_TYPE_VAR_INT,
     SYMBOL_TYPE_FUNCTION,
 } symbol_type_t;

@@ -6,6 +6,11 @@
 #include <map>
 #include <string>
 
+/*
+    Abandoned for now;
+    might be transformed into value_t2reg
+    when implement advanced reg alloc
+*/
 bool operator<(koopa_raw_binary_t a, koopa_raw_binary_t b){
     return ((uint32_t)a.op == (uint32_t)b.op) ?
             (((uint64_t)a.lhs == (uint64_t)b.lhs) ?
@@ -13,15 +18,9 @@ bool operator<(koopa_raw_binary_t a, koopa_raw_binary_t b){
                 : ((uint64_t)a.lhs < (uint64_t)b.lhs))
             : ((uint32_t)a.op < (uint32_t)b.op);
 }
+static std::map<koopa_raw_binary_t, std::string> binary2reg;
 
 static int register_counter = 0;
-
-/*
-    Abandoned for now;
-    might be transformed into value_t2reg
-    when implement advanced reg alloc
-*/
-static std::map<koopa_raw_binary_t, std::string> binary2reg;
 
 static std::map<koopa_raw_value_t, std::string> globl2name;
 

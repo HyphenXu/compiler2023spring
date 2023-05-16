@@ -12,6 +12,7 @@
 
 using namespace std;
 
+// TA's words:
 // 声明 lexer 的输入, 以及 parser 函数
 // 为什么不引用 sysy.tab.hpp 呢? 因为首先里面没有 yyin 的定义
 // 其次, 因为这个文件不是我们自己写的, 而是被 Bison 生成出来的
@@ -26,6 +27,7 @@ typedef enum{
 } cmode_t;
 
 int main(int argc, const char *argv[]) {
+    // TA's words:
     // 解析命令行参数. 测试脚本/评测平台要求你的编译器能接收如下参数:
     // compiler 模式 输入文件 -o 输出文件
     assert(argc == 5);
@@ -44,10 +46,12 @@ int main(int argc, const char *argv[]) {
         assert(false);
     }
 
+    // TA's words:
     // 打开输入文件, 并且指定 lexer 在解析的时候读取这个文件
     yyin = fopen(input, "r");
     assert(yyin);
 
+    // TA's words:
     // 调用 parser 函数, parser 函数会进一步调用 lexer 解析输入文件的
     unique_ptr<BaseAST> ast;
     auto ret = yyparse(ast);
