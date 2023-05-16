@@ -16,7 +16,7 @@ static int result_id = 0;
 static std::stack<int> stack_while_id;
 
 typedef struct{
-    int depth;
+    bool is_zero_depth;
     int result_number;
     int result_id;
 } exp_result_t;
@@ -25,7 +25,6 @@ typedef struct{
     bool lhs;
     bool is_var;
     int val;
-    // int result_id;
     std::string pointer;
 } l_val_result_t;
 
@@ -123,8 +122,7 @@ public:
         stack_namespace = std::stack<int>();
 
         stack_namespace.push(GLOBAL_NAMESPACE_ID);
-        map_blockID2symbolTable[GLOBAL_NAMESPACE_ID] = SymbolTable();
-        map_blockID2symbolTable[GLOBAL_NAMESPACE_ID].update_parent_block(ROOT_NAMESPACE_ID);
+        symbol_tables[GLOBAL_NAMESPACE_ID] = SymbolTable(ROOT_NAMESPACE_ID);
 
         SymbolTable::insert_lib_func_def();
 
@@ -280,14 +278,14 @@ public:
         assert((*string_b_type) == "int");
 
         int cur_namespace = stack_namespace.top();
-        assert(!map_blockID2symbolTable[cur_namespace].bool_symbol_exist_local(ident));
+        assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
 
         exp_result_t const_exp_result;
         const_init_val->Dump2StringIR(&const_exp_result);
-        assert(const_exp_result.depth == 0);
+        assert(const_exp_result.is_zero_depth);
         int val = const_exp_result.result_number;
 
-        map_blockID2symbolTable[cur_namespace].insert_const_definition_int(ident, val);
+        symbol_tables[cur_namespace].insert_const_definition_int(ident, val);
     }
 };
 
@@ -378,13 +376,13 @@ public:
 
         if(init_val == nullptr){
             int cur_namespace = stack_namespace.top();
-            assert(!map_blockID2symbolTable[cur_namespace].bool_symbol_exist_local(ident));
+            assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
 
-            map_blockID2symbolTable[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
+            symbol_tables[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
 
             if(is_global_var){
                 std::cout << "global "
-                << map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident)
+                << symbol_tables[cur_namespace].get_var_pointer_int(ident)
                 << " = alloc "
                 << string_koopa_type
                 << ", zeroinit"
@@ -392,7 +390,7 @@ public:
             }
             else{
                 std::cout << "\t"
-                << map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident)
+                << symbol_tables[cur_namespace].get_var_pointer_int(ident)
                 << " = alloc "
                 << string_koopa_type
                 << std::endl;
@@ -407,15 +405,15 @@ public:
                     TODO: what if not depth == 0?
                     e.g., int x = 1, y = x + 1; (?)
                 */
-                assert(init_val_result.depth == 0);
+                assert(init_val_result.is_zero_depth);
 
                 int cur_namespace = stack_namespace.top();
-                assert(!map_blockID2symbolTable[cur_namespace].bool_symbol_exist_local(ident));
+                assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
 
-                map_blockID2symbolTable[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
+                symbol_tables[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
 
                 std::cout << "global "
-                << map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident)
+                << symbol_tables[cur_namespace].get_var_pointer_int(ident)
                 << " = alloc "
                 << string_koopa_type
                 << ", "
@@ -424,7 +422,7 @@ public:
             }
             else{
                 std::string string_value_to_be_stored;
-                if(init_val_result.depth == 0){
+                if(init_val_result.is_zero_depth){
                     /* the value is in init_val_result.result_number */
                     string_value_to_be_stored = std::to_string(init_val_result.result_number);
                 }
@@ -434,11 +432,11 @@ public:
                 }
 
                 int cur_namespace = stack_namespace.top();
-                assert(!map_blockID2symbolTable[cur_namespace].bool_symbol_exist_local(ident));
+                assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
 
-                map_blockID2symbolTable[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
+                symbol_tables[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
 
-                std::string string_var_pointer = map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident);
+                std::string string_var_pointer = symbol_tables[cur_namespace].get_var_pointer_int(ident);
 
                 std::cout << "\t"
                     << string_var_pointer
@@ -515,7 +513,7 @@ public:
             std::cout << ": i32";
         }
 
-        map_blockID2symbolTable[cur_namespace].insert_func_def(ident, func_type);
+        symbol_tables[cur_namespace].insert_func_def(ident, func_type);
 
         std::cout << " {" << std::endl;
         std::cout << "%" << "entry" << ":" << std::endl;
@@ -609,26 +607,25 @@ public:
         /* aux MIGHT be nullptr */
         func_f_params_result_t *params = (func_f_params_result_t *)aux;
 
-        map_blockID2symbolTable[id] = SymbolTable();
         assert(!stack_namespace.empty());
-        map_blockID2symbolTable[id].update_parent_block(stack_namespace.top());
+        symbol_tables[id] = SymbolTable(stack_namespace.top());
         stack_namespace.push(id);
 
         if(params != nullptr){
             int count = params->count;
             for(int i = 0; i < count; ++i){
                 std::string &ident = params->params[i].ident;
-                assert(!map_blockID2symbolTable[id].bool_symbol_exist_local(ident));
+                assert(!symbol_tables[id].bool_symbol_exist_local(ident));
 
                 /* FURTHER: what if other types */
                 assert(params->params[i].b_type == "int");
-                map_blockID2symbolTable[id].insert_var_func_param_int(ident, id);
+                symbol_tables[id].insert_var_func_param_int(ident, id);
 
-                std::cout << "\t" << map_blockID2symbolTable[id].get_var_pointer_int(ident);
+                std::cout << "\t" << symbol_tables[id].get_var_pointer_int(ident);
                 std::cout << "= alloc i32" << std::endl;
 
                 std::cout << "\tstore @" << ident << ", ";
-                std::cout << map_blockID2symbolTable[id].get_var_pointer_int(ident);
+                std::cout << symbol_tables[id].get_var_pointer_int(ident);
                 std::cout << std::endl;
             }
         }
@@ -638,7 +635,7 @@ public:
         }
 
         stack_namespace.pop();
-        map_blockID2symbolTable[id].clear_table();
+        symbol_tables[id].clear_table();
     }
 };
 
@@ -806,7 +803,7 @@ public:
             l_val->Dump2StringIR(&l_val_result);
 
             assert(l_val_result.is_var);
-            if(exp_result.depth == 0){
+            if(exp_result.is_zero_depth){
                 std::cout << "\tstore " << exp_result.result_number
                         << ", " << l_val_result.pointer << std::endl;
             }
@@ -832,7 +829,7 @@ public:
             else{
                 exp->Dump2StringIR(&exp_result);
 
-                if(exp_result.depth == 0){
+                if(exp_result.is_zero_depth){
                     std::cout << "\tret " << exp_result.result_number << std::endl;
                 }
                 else{
@@ -843,11 +840,11 @@ public:
             break;
         case STMT_IF_STMT:
             exp->Dump2StringIR(&exp_result);
-            if(exp_result.depth != 0){
-                std::cout << "\tbr %" << exp_result.result_id << ", ";
+            if(exp_result.is_zero_depth){
+                std::cout << "\tbr " << exp_result.result_number << ", ";
             }
             else{
-                std::cout << "\tbr " << exp_result.result_number << ", ";
+                std::cout << "\tbr %" << exp_result.result_id << ", ";
             }
             std::cout << "%then_" << if_stmt_id << ", ";
             std::cout << "%else_" << if_stmt_id << std::endl;
@@ -869,7 +866,7 @@ public:
 
             std::cout << "%while_cond_" << while_id << ":" << std::endl;
             exp->Dump2StringIR(&exp_result);
-            if(exp_result.depth == 0){
+            if(exp_result.is_zero_depth){
                 std::cout << "\tbr " << exp_result.result_number << ", ";
             }
             else{
@@ -961,11 +958,11 @@ public:
         {
         case OPEN_STMT_IF_GENERAL_STMT:
             exp->Dump2StringIR(&exp_result);
-            if(exp_result.depth != 0){
-                std::cout << "\tbr %" << exp_result.result_id << ", ";
+            if(exp_result.is_zero_depth){
+                std::cout << "\tbr " << exp_result.result_number << ", ";
             }
             else{
-                std::cout << "\tbr " << exp_result.result_number << ", ";
+                std::cout << "\tbr %" << exp_result.result_id << ", ";
             }
             std::cout << "%then_" << if_stmt_id << ", ";
             std::cout << "%end_" << if_stmt_id << std::endl;
@@ -978,11 +975,11 @@ public:
             break;
         case OPEN_STMT_IF_STMT_OPEN_STMT:
             exp->Dump2StringIR(&exp_result);
-            if(exp_result.depth != 0){
-                std::cout << "\tbr %" << exp_result.result_id << ", ";
+            if(exp_result.is_zero_depth){
+                std::cout << "\tbr " << exp_result.result_number << ", ";
             }
             else{
-                std::cout << "\tbr " << exp_result.result_number << ", ";
+                std::cout << "\tbr %" << exp_result.result_id << ", ";
             }
             std::cout << "%then_" << if_stmt_id << ", ";
             std::cout << "%else_" << if_stmt_id << std::endl;
@@ -1004,7 +1001,7 @@ public:
 
             std::cout << "%while_cond_" << while_id << ":" << std::endl;
             exp->Dump2StringIR(&exp_result);
-            if(exp_result.depth == 0){
+            if(exp_result.is_zero_depth){
                 std::cout << "\tbr " << exp_result.result_number << ", ";
             }
             else{
@@ -1059,17 +1056,17 @@ public:
         int cur_namespace = stack_namespace.top();
 
         if(lval->lhs){
-            assert(map_blockID2symbolTable[cur_namespace].bool_symbol_is_var(ident));
+            assert(symbol_tables[cur_namespace].bool_symbol_is_var_int(ident));
             lval->is_var = true;
             lval->pointer =
-                map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident);
+                symbol_tables[cur_namespace].get_var_pointer_int(ident);
         }
         else{
-            bool is_var = map_blockID2symbolTable[cur_namespace].bool_symbol_is_var(ident);
+            bool is_var = symbol_tables[cur_namespace].bool_symbol_is_var_int(ident);
             lval->is_var = is_var;
             if(is_var){
                 lval->pointer =
-                    map_blockID2symbolTable[cur_namespace].get_var_pointer_int(ident);
+                    symbol_tables[cur_namespace].get_var_pointer_int(ident);
 
                 std::cout << "\t%" << result_id++ << " = load "
                         << lval->pointer
@@ -1077,7 +1074,7 @@ public:
             }
             else{
                 lval->val =
-                    map_blockID2symbolTable[cur_namespace].get_const_definition_int(ident);
+                    symbol_tables[cur_namespace].get_const_definition_int(ident);
             }
         }
     }
@@ -1129,16 +1126,16 @@ public:
             l_val->Dump2StringIR(&l_val_result);
 
             if(l_val_result.is_var){
-                ((exp_result_t *)aux)->depth = 1;
+                ((exp_result_t *)aux)->is_zero_depth = false;
                 ((exp_result_t *)aux)->result_id = result_id - 1;
             }
             else{
-                ((exp_result_t *)aux)->depth = 0;
+                ((exp_result_t *)aux)->is_zero_depth = true;
                 ((exp_result_t *)aux)->result_number = l_val_result.val;
             }
             break;
         case PRIMARY_EXP_NUMBER:
-            ((exp_result_t *)aux)->depth = 0;
+            ((exp_result_t *)aux)->is_zero_depth = true;
             ((exp_result_t *)aux)->result_number = number;
             break;
         default:
@@ -1202,8 +1199,8 @@ public:
         case UNARY_EXP_UNARY_OP_EXP:
             assert(unary_op == "+" || unary_op == "-" || unary_op == "!");
             unary_exp->Dump2StringIR(&result1);
-            if(result1.depth == 0){
-                result->depth = 0;
+            if(result1.is_zero_depth){
+                result->is_zero_depth = true;
                 switch (unary_op[0])
                 {
                 case '+':
@@ -1225,17 +1222,17 @@ public:
                 {
                 case '+':
                     /* do nothing */
-                    result->depth = result1.depth;
+                    result->is_zero_depth = result1.is_zero_depth;
                     result->result_id = result_id;
                     break;
                 case '-':
-                    result->depth = result1.depth + 1;
+                    result->is_zero_depth = false;
                     result->result_id = result_id++;
                     std::cout << "\t%" << result->result_id << " = sub 0, ";
                     std::cout << "%" << result1.result_id << std::endl;
                     break;
                 case '!':
-                    result->depth = result1.depth + 1;
+                    result->is_zero_depth = false;
                     result->result_id = result_id++;
                     std::cout << "\t%" << result->result_id << " = eq 0, ";
                     std::cout << "%" << result1.result_id << std::endl;
@@ -1251,11 +1248,11 @@ public:
                 func_r_params->Dump2StringIR(&params);
             }
 
-            result->depth = 1;
+            result->is_zero_depth = false;
 
             cur_namespace = stack_namespace.top();
 
-            type_return = map_blockID2symbolTable[cur_namespace].get_func_return_type(ident);
+            type_return = symbol_tables[cur_namespace].get_func_return_type(ident);
             if(type_return == "void"){
                 std::cout << "\tcall @" << ident << "(";
             }
@@ -1272,7 +1269,7 @@ public:
                 i = 0;
                 count = params.count;
                 if(i != count){
-                    if(params.params[i].depth == 0){
+                    if(params.params[i].is_zero_depth){
                         std::cout << params.params[i].result_number;
                     }
                     else{
@@ -1282,7 +1279,7 @@ public:
                 }
                 for(; i < params.count; ++i){
                     std::cout << ", ";
-                    if(params.params[i].depth == 0){
+                    if(params.params[i].is_zero_depth){
                         std::cout << params.params[i].result_number;
                     }
                     else{
@@ -1365,8 +1362,8 @@ public:
             mul_exp->Dump2StringIR(&result1);
             unary_exp->Dump2StringIR(&result2);
 
-            if(result1.depth == 0 && result2.depth == 0){
-                result->depth = 0;
+            if(result1.is_zero_depth && result2.is_zero_depth){
+                result->is_zero_depth = true;
                 switch (op[0])
                 {
                 case '/':
@@ -1387,7 +1384,7 @@ public:
                 }
             }
             else{
-                result->depth = std::max(result1.depth, result2.depth) + 1;
+                result->is_zero_depth = false;
                 result->result_id = result_id++;
 
                 switch (op[0])
@@ -1406,14 +1403,14 @@ public:
                     break;
                 }
 
-                if(result1.depth == 0){
+                if(result1.is_zero_depth){
                     std::cout << result1.result_number;
                 }
                 else{
                     std::cout << "%" << result1.result_id;
                 }
                 std::cout << ", ";
-                if(result2.depth == 0){
+                if(result2.is_zero_depth){
                     std::cout << result2.result_number;
                 }
                 else{
@@ -1459,8 +1456,8 @@ public:
             add_exp->Dump2StringIR(&result1);
             mul_exp->Dump2StringIR(&result2);
 
-            if(result1.depth == 0 && result2.depth == 0){
-                result->depth = 0;
+            if(result1.is_zero_depth && result2.is_zero_depth){
+                result->is_zero_depth = true;
                 switch (op[0])
                 {
                 case '+':
@@ -1477,7 +1474,7 @@ public:
                 }
             }
             else{
-                result->depth = std::max(result1.depth, result2.depth) + 1;
+                result->is_zero_depth = false;
                 result->result_id = result_id++;
 
                 switch (op[0])
@@ -1493,14 +1490,14 @@ public:
                     break;
                 }
 
-                if(result1.depth == 0){
+                if(result1.is_zero_depth){
                     std::cout << result1.result_number;
                 }
                 else{
                     std::cout << "%" << result1.result_id;
                 }
                 std::cout << ", ";
-                if(result2.depth == 0){
+                if(result2.is_zero_depth){
                     std::cout << result2.result_number;
                 }
                 else{
@@ -1546,8 +1543,8 @@ public:
             rel_exp->Dump2StringIR(&result1);
             add_exp->Dump2StringIR(&result2);
 
-            if(result1.depth == 0 && result2.depth == 0){
-                result->depth = 0;
+            if(result1.is_zero_depth && result2.is_zero_depth){
+                result->is_zero_depth = true;
                 if(op == "<"){
                     result->result_number = result1.result_number
                                             < result2.result_number;
@@ -1566,7 +1563,7 @@ public:
                 }
             }
             else{
-                result->depth = std::max(result1.depth, result2.depth) + 1;
+                result->is_zero_depth = false;
                 result->result_id = result_id++;
 
                 if(op == "<"){
@@ -1582,14 +1579,14 @@ public:
                     std::cout << "\t%" << result->result_id << " = ge ";
                 }
 
-                if(result1.depth == 0){
+                if(result1.is_zero_depth){
                     std::cout << result1.result_number;
                 }
                 else{
                     std::cout << "%" << result1.result_id;
                 }
                 std::cout << ", ";
-                if(result2.depth == 0){
+                if(result2.is_zero_depth){
                     std::cout << result2.result_number;
                 }
                 else{
@@ -1635,8 +1632,8 @@ public:
             rel_exp->Dump2StringIR(&result1);
             eq_exp->Dump2StringIR(&result2);
 
-            if(result1.depth == 0 && result2.depth == 0){
-                result->depth = 0;
+            if(result1.is_zero_depth && result2.is_zero_depth){
+                result->is_zero_depth = true;
                 if(op == "=="){
                     result->result_number = result1.result_number
                                         == result2.result_number;
@@ -1647,7 +1644,7 @@ public:
                 }
             }
             else{
-                result->depth = std::max(result1.depth, result2.depth) + 1;
+                result->is_zero_depth = false;
                 result->result_id = result_id++;
 
                 if(op == "=="){
@@ -1657,14 +1654,14 @@ public:
                     std::cout << "\t%" << result->result_id << " = ne ";
                 }
 
-                if(result1.depth == 0){
+                if(result1.is_zero_depth){
                     std::cout << result1.result_number;
                 }
                 else{
                     std::cout << "%" << result1.result_id;
                 }
                 std::cout << ", ";
-                if(result2.depth == 0){
+                if(result2.is_zero_depth){
                     std::cout << result2.result_number;
                 }
                 else{
@@ -1711,20 +1708,20 @@ public:
             l_and_exp->Dump2StringIR(&result1);
 
             /* short-circuit logic */
-            if(result1.depth == 0){
+            if(result1.is_zero_depth){
                 if(result1.result_number == 0){
-                    result->depth = 0;
+                    result->is_zero_depth = true;
                     result->result_number = 0;
                 }
                 else{
                     eq_exp->Dump2StringIR(&result2);
-                    if(result2.depth == 0){
-                        result->depth = 0;
+                    if(result2.is_zero_depth){
+                        result->is_zero_depth = true;
                         result->result_number = result1.result_number
                                             && result2.result_number;
                     }
                     else{
-                        result->depth = result2.depth + 1;
+                        result->is_zero_depth = false;
                         result->result_id = result_id++;
                         std::cout << "\t%" << result->result_id;
                         std::cout << " = ne 0, %" << result2.result_id;
@@ -1751,7 +1748,7 @@ public:
                 std::cout << "%" << result1.result_id << std::endl;
 
                 std::cout << "\t%" << result_id++ << " = ne 0, ";
-                if(result2.depth == 0){
+                if(result2.is_zero_depth){
                     std::cout << result2.result_number;
                 }
                 else{
@@ -1759,11 +1756,7 @@ public:
                 }
                 std::cout << std::endl;
 
-                /*
-                    TODO: the semantics of `depth` is problematic here.
-                    better change from int to bool
-                */
-                result->depth = std::max(result1.depth, result2.depth) + 1;
+                result->is_zero_depth = false;
                 result->result_id = result_id++;
 
                 std::cout   << "\t%" << result->result_id << " = and %"
@@ -1821,20 +1814,20 @@ public:
             l_or_exp->Dump2StringIR(&result1);
 
             /* short-circuit logic */
-            if(result1.depth == 0){
+            if(result1.is_zero_depth){
                 if(result1.result_number != 0){
-                    result->depth = 0;
+                    result->is_zero_depth = true;
                     result->result_number = 1;
                 }
                 else{
                     l_and_exp->Dump2StringIR(&result2);
-                    if(result2.depth == 0){
-                        result->depth = 0;
+                    if(result2.is_zero_depth){
+                        result->is_zero_depth = true;
                         result->result_number = result1.result_number
                                             || result2.result_number;
                     }
                     else{
-                        result->depth = result2.depth + 1;
+                        result->is_zero_depth = false;
                         result->result_id = result_id++;
                         std::cout << "\t%" << result->result_id;
                         std::cout << " = ne 0, %" << result2.result_id;
@@ -1859,7 +1852,7 @@ public:
 
                 std::cout << "\t%" << result_id++ << " = or ";
                 std::cout << "%" << result1.result_id << ", ";
-                if(result2.depth == 0){
+                if(result2.is_zero_depth){
                     std::cout << result2.result_number;
                 }
                 else{
@@ -1867,11 +1860,7 @@ public:
                 }
                 std::cout << std::endl;
 
-                /*
-                    TODO: the semantics of `depth` is problematic here.
-                    better change from int to bool
-                */
-                result->depth = std::max(result1.depth, result2.depth) + 1;
+                result->is_zero_depth = false;
                 result->result_id = result_id++;
                 std::cout << "\t%" << result->result_id << " = ne 0, %";
                 std::cout << result->result_id - 1 << std::endl;
