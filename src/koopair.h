@@ -3,6 +3,6 @@
 
 #include "koopa.h"
 
-void libkoopa_string2rawprog_and_visit(const char *str);
+void libkoopa_string2rawprog2riscv(const char *str);
 
 #endif /**< src/koopair.h */

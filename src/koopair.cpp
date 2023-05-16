@@ -6,20 +6,6 @@
 #include <map>
 #include <string>
 
-/*
-    Abandoned for now;
-    might be transformed into value_t2reg
-    when implement advanced reg alloc
-*/
-bool operator<(koopa_raw_binary_t a, koopa_raw_binary_t b){
-    return ((uint32_t)a.op == (uint32_t)b.op) ?
-            (((uint64_t)a.lhs == (uint64_t)b.lhs) ?
-                ((uint64_t)a.rhs < (uint64_t)b.rhs)
-                : ((uint64_t)a.lhs < (uint64_t)b.lhs))
-            : ((uint32_t)a.op < (uint32_t)b.op);
-}
-static std::map<koopa_raw_binary_t, std::string> binary2reg;
-
 static int register_counter = 0;
 
 static std::map<koopa_raw_value_t, std::string> globl2name;
@@ -42,7 +28,12 @@ void Visit(const koopa_raw_jump_t &jump);
 void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_global_alloc_t &globl_alloc, const koopa_raw_value_t &value);
 
-void libkoopa_string2rawprog_and_visit(const char *str){
+/**
+ * @brief string Koopa IR --(libkoopa)--> Koopa raw program --(Visit)--> RISCV
+ *
+ * @param str string-form Koopa IR
+ */
+void libkoopa_string2rawprog2riscv(const char *str){
     koopa_program_t program;
 
     koopa_error_code_t ret = koopa_parse_from_string(str, &program);
@@ -68,10 +59,13 @@ void Visit(const koopa_raw_program_t &program){
 }
 
 void Visit(const koopa_raw_slice_t &slice){
-    std::cerr << "slice_kind: " << slice.kind << "\t"
-            <<"slice_len: " << slice.len << std::endl;
+
+std::cerr << "slice_kind: " << slice.kind << "\t" <<"slice_len: " << slice.len << std::endl;
+
     for(size_t i = 0; i < slice.len; ++i){
-        std::cerr << "slice_item" << i << std::endl;
+
+std::cerr << "slice_item" << i << std::endl;
+
         auto ptr = slice.buffer[i];
         switch (slice.kind)
         {
@@ -100,15 +94,12 @@ void Visit(const koopa_raw_slice_t &slice){
 }
 
 void Visit(const koopa_raw_function_t &func){
-    // func->ty, func->params
-
     /* ignore decl */
     if(func->bbs.len == 0){
         return;
     }
 
     func_alloc_frame(func);
-    // frame = &(frames[func->name]);
 
     std::cout << "\t.globl " << func->name + 1 << std::endl;
     std::cout << func->name + 1 << ": " << std::endl;
@@ -132,59 +123,66 @@ void Visit(const koopa_raw_function_t &func){
 }
 
 void Visit(const koopa_raw_basic_block_t &bb){
-    // bb->used_by, bb->params
     assert(bb->name != nullptr);
-    if(std::string(bb->name) != "%entry")
+    if(std::string(bb->name) != "%entry"){
         std::cout << bb->name + 1 << ":" << std::endl;
+    }
 
     Visit(bb->insts);
 }
 
 /* Visit "value", but actually visit "inst" */
 void Visit(const koopa_raw_value_t &value){
-    std::cerr << "\t" << "value_kind:" << value->kind.tag
-            << "\t" << "type_tag:" << (value->ty->tag) << std::endl;
+
+std::cerr << "\t" << "value_kind:" << value->kind.tag << "\t" << "type_tag:" << (value->ty->tag) << std::endl;
+
     const auto &kind = value->kind;
     switch (kind.tag)
     {
-    case KOOPA_RVT_RETURN:
-        Visit(kind.data.ret);
-        break;
     case KOOPA_RVT_INTEGER:
+        /* Not expecting integer as inst */
         assert(false);
-        // Visit(kind.data.integer);
         break;
-    case KOOPA_RVT_BINARY:
-        Visit(kind.data.binary, value);
-        break;
+
     case KOOPA_RVT_ALLOC:
-        std::cerr<<"\tname:"<<value->name
-                <<"\ttype_tag:" <<value->ty->tag
-                <<"\tpointer_type_tag:"<<value->ty->data.pointer.base->tag
-                <<"\tvalue_used_by_len:"<<value->used_by.len<<std::endl;
-        // Visit(kind.data)
+
+std::cerr<<"\tname:"<<value->name <<"\ttype_tag:" <<value->ty->tag <<"\tpointer_type_tag:"<<value->ty->data.pointer.base->tag <<"\tvalue_used_by_len:"<<value->used_by.len<<std::endl;
+
+        /* Already dealt with in prologue */
         break;
-    case KOOPA_RVT_STORE:
-        Visit(kind.data.store);
+    case KOOPA_RVT_GLOBAL_ALLOC:
+        /* Global */
+        Visit(kind.data.global_alloc, value);
         break;
     case KOOPA_RVT_LOAD:
         Visit(kind.data.load, value);
         break;
+    case KOOPA_RVT_STORE:
+        /* No LVal */
+        Visit(kind.data.store);
+        break;
+
+    case KOOPA_RVT_BINARY:
+        Visit(kind.data.binary, value);
+        break;
     case KOOPA_RVT_BRANCH:
+        /* No LVal */
         Visit(kind.data.branch);
         break;
     case KOOPA_RVT_JUMP:
+        /* No LVal */
         Visit(kind.data.jump);
         break;
     case KOOPA_RVT_CALL:
         Visit(kind.data.call, value);
         break;
-    case KOOPA_RVT_GLOBAL_ALLOC:
-        Visit(kind.data.global_alloc, value);
+    case KOOPA_RVT_RETURN:
+        /* No LVal */
+        Visit(kind.data.ret);
         break;
     default:
         /*TODO: Other raw value types*/
-        std::cerr << kind.tag << std::endl;
+std::cerr << kind.tag << std::endl;
         assert(false);
         break;
     }
@@ -192,6 +190,7 @@ void Visit(const koopa_raw_value_t &value){
 }
 
 void Visit(const koopa_raw_return_t &ret){
+    /* load return value if necessary */
     if(ret.value != nullptr){
         if(ret.value->kind.tag == KOOPA_RVT_INTEGER){
             std::cout << "\tli\t" << "a0" << ", ";
@@ -199,11 +198,6 @@ void Visit(const koopa_raw_return_t &ret){
             std::cout << std::endl;
         }
         else{
-            // if(ret.value->kind.tag == KOOPA_RVT_BINARY){
-            //     std::string reg = binary2reg[ret.value->kind.data.binary];
-            //     std::cout << "\tmv\t" << "a0, ";
-            //     std::cout << reg << std::endl;
-            // }
             assert((*frame).find(ret.value) != (*frame).end());
             int offset_ret = (*frame)[ret.value].offset;
             assert(offset_ret >= 0);
@@ -260,13 +254,18 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
         }
     }
     else{
-        // assert(lhs->kind.tag == KOOPA_RVT_BINARY);
-        // reg_lhs = binary2reg[lhs->kind.data.binary];
-        std::cerr << lhs->kind.tag << std::endl;
         assert((*frame).find(lhs) != (*frame).end());
         reg_lhs = "t" + std::to_string(register_counter++);
-        std::cout << "\tlw\t" << reg_lhs << ", ";
-        std::cout << (*frame)[lhs].offset << "(sp)" << std::endl;
+        int offset_lhs = (*frame)[lhs].offset;
+        assert(offset_lhs >= 0);
+        if(offset_lhs > STACK_IMM_POS_MAX){
+            /* TODO */
+            assert(false);
+        }
+        else{
+            std::cout << "\tlw\t" << reg_lhs << ", ";
+            std::cout << offset_lhs << "(sp)" << std::endl;
+        }
     }
     if(rhs->kind.tag == KOOPA_RVT_INTEGER){
         if(rhs->kind.data.integer.value == 0){
@@ -278,24 +277,20 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
         }
     }
     else{
-        // assert(rhs->kind.tag == KOOPA_RVT_BINARY);
-        // reg_rhs = binary2reg[rhs->kind.data.binary];
-        std::cerr << rhs->kind.tag << std::endl;
         assert((*frame).find(rhs) != (*frame).end());
         reg_rhs = "t" + std::to_string(register_counter++);
-        std::cout << "\tlw\t" << reg_rhs << ", ";
-        std::cout << (*frame)[rhs].offset << "(sp)" << std::endl;
+        int offset_rhs = (*frame)[rhs].offset;
+        assert(offset_rhs >= 0);
+        if(offset_rhs > STACK_IMM_POS_MAX){
+            /* TODO */
+            assert(false);
+        }
+        else{
+            std::cout << "\tlw\t" << reg_rhs << ", ";
+            std::cout << offset_rhs << "(sp)" << std::endl;
+        }
     }
 
-    // /*  TODO:
-    //     what if both "x0"?
-    //     better policy;
-    //     check if the value in reg is no longer needed
-    // */
-    // // reg_result = ((reg_rhs == "x0") ? reg_lhs : reg_rhs);
-    // // binary2reg[binary] = reg_result;
-    // reg_result = "t" + std::to_string(register_counter++);
-    // binary2reg[binary] = reg_result;
     reg_result = "t" + std::to_string(register_counter_init);
 
     switch (op)
@@ -381,12 +376,12 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
                     << reg_rhs << std::endl;
         break;
     default:
-        std::cout << op << std::endl;
+        /* TODO what about other binary ops? (e.g. shift?)*/
         assert(false);
         break;
     }
 
-    // assert((*frame).find(value) != (*frame).end());
+    assert((*frame).find(value) != (*frame).end());
     int offset_result = (*frame)[value].offset;
     assert(offset_result >= 0);
     if(offset_result > STACK_IMM_POS_MAX){
@@ -420,8 +415,15 @@ void Visit(const koopa_raw_store_t &store){
             size_t frame_size = map_frame2size[frame];
             idx -= 8;
             int offset_src = frame_size + idx * 4;
-            std::cout << "\tlw\tt" << register_counter << ", ";
-            std::cout << offset_src << "(sp)" << std::endl;
+            assert(offset_src >= 0);
+            if(offset_src > STACK_IMM_POS_MAX){
+                /* TODO */
+                assert(false);
+            }
+            else{
+                std::cout << "\tlw\tt" << register_counter << ", ";
+                std::cout << offset_src << "(sp)" << std::endl;
+            }
 
             int offset_dest = (*frame)[store.dest].offset;
             assert(offset_dest >= 0);
@@ -441,9 +443,9 @@ void Visit(const koopa_raw_store_t &store){
             register_counter--;
         }
         else{
-            std::cerr << store.value->kind.tag << ","
-                << store.value->name  << ","
-                << store.value->ty->tag << "\n";
+
+std::cerr << store.value->kind.tag << "," << store.value->name  << "," << store.value->ty->tag << "\n";
+
             assert((*frame).find(store.value) != (*frame).end());
             int offset_src = (*frame)[store.value].offset;
             assert(offset_src >= 0);
@@ -483,8 +485,6 @@ void Visit(const koopa_raw_store_t &store){
 }
 
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
-    // assert((*frame).find(load.src) != (*frame).end());
-    // assert((*frame).find(value) != (*frame).end());
 
 std::cerr << "?" <<    load.src->kind.tag << "\n";
 
@@ -510,6 +510,7 @@ std::cerr << "?" <<    load.src->kind.tag << "\n";
         }
     }
 
+    assert((*frame).find(value) != (*frame).end());
     int offset_dest = (*frame)[value].offset;
     assert(offset_dest >= 0);
 
@@ -585,6 +586,7 @@ void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
                 std::cout << param->kind.data.integer.value << std::endl;
 
                 int offset_dest = (idx - 8) * 4;
+                assert(offset_dest >= 0);
                 if(offset_dest > STACK_IMM_POS_MAX){
                     /* TODO */
                     assert(false);
@@ -624,15 +626,21 @@ void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
     if(value->ty->tag != KOOPA_RTT_UNIT){
         assert((*frame).find(value) != (*frame).end());
         int offset_dest = (*frame)[value].offset;
-        std::cout << "\tsw\ta0" << ", ";
-        std::cout << offset_dest << "(sp)" << std::endl;
+        assert(offset_dest >= 0);
+        if(offset_dest > STACK_IMM_POS_MAX){
+            /* TODO */
+            assert(false);
+        }
+        else{
+            std::cout << "\tsw\ta0" << ", ";
+            std::cout << offset_dest << "(sp)" << std::endl;
+        }
     }
 }
 
 void Visit(const koopa_raw_global_alloc_t &globl_alloc, const koopa_raw_value_t &value){
-    std::cerr << "?";
-    std::cerr << globl_alloc.init->kind.tag << "\t"
-            << globl_alloc.init->kind.data.integer.value << "\n";
+
+std::cerr << "?" << globl_alloc.init->kind.tag << "\t" << globl_alloc.init->kind.data.integer.value << "\n";
 
     std::cout << "\t.globl\t" << value->name + 1 << std::endl;
     std::cout << value->name + 1 << ":" << std::endl;
@@ -646,6 +654,10 @@ void Visit(const koopa_raw_global_alloc_t &globl_alloc, const koopa_raw_value_t 
         if(globl_alloc.init->ty->tag == KOOPA_RTT_INT32){
             std::cout << 4 << std::endl;
         }
+        else{
+            /* TODO */
+            assert(false);
+        }
         break;
     case KOOPA_RVT_INTEGER:
         if(globl_alloc.init->ty->tag == KOOPA_RTT_INT32){
@@ -653,9 +665,28 @@ void Visit(const koopa_raw_global_alloc_t &globl_alloc, const koopa_raw_value_t 
                     << globl_alloc.init->kind.data.integer.value
                     << std::endl;
         }
+        else{
+            /* TODO */
+            assert(false);
+        }
         break;
     default:
+        /* TODO */
         assert(false);
         break;
     }
 }
+
+/*
+    Abandoned for now;
+    might be transformed into value_t2reg
+    when implement advanced reg alloc
+*/
+// bool operator<(koopa_raw_binary_t a, koopa_raw_binary_t b){
+//     return ((uint32_t)a.op == (uint32_t)b.op) ?
+//             (((uint64_t)a.lhs == (uint64_t)b.lhs) ?
+//                 ((uint64_t)a.rhs < (uint64_t)b.rhs)
+//                 : ((uint64_t)a.lhs < (uint64_t)b.lhs))
+//             : ((uint32_t)a.op < (uint32_t)b.op);
+// }
+// static std::map<koopa_raw_binary_t, std::string> binary2reg;

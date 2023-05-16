@@ -78,7 +78,7 @@ int main(int argc, const char *argv[]) {
     if(cmode == CMODE_RISCV){
         ofstream fout(output);
         streambuf* old_buffer = cout.rdbuf(fout.rdbuf());
-        libkoopa_string2rawprog_and_visit(string_koopair.c_str());
+        libkoopa_string2rawprog2riscv(string_koopair.c_str());
         cout.rdbuf(old_buffer);
     }
 
