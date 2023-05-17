@@ -61,6 +61,7 @@ static int while_id = 0;
 %type <ast_val> Decl
 %type <ast_val> ConstDecl ConstDefs ConstDef ConstInitVal
 %type <ast_val> VarDecl VarDefs VarDef InitVal
+%type <ast_val> ConstInitValArray ConstExpArray InitValArray ExpArray
 
 %type <ast_val> FuncDef FuncFParams FuncFParam
 
@@ -164,7 +165,15 @@ ConstDef
     : IDENT '=' ConstInitVal {
         auto ast = new ConstDefAST();
         ast->ident = *unique_ptr<string>($1);
+        ast->const_exp_array = nullptr;
         ast->const_init_val = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | IDENT ConstExpArray '=' ConstInitVal {
+        auto ast = new ConstDefAST();
+        ast->ident = *unique_ptr<string>($1);
+        ast->const_exp_array = unique_ptr<BaseAST>($2);
+        ast->const_init_val = unique_ptr<BaseAST>($4);
         $$ = ast;
     }
     ;
@@ -172,7 +181,41 @@ ConstDef
 ConstInitVal
     : ConstExp {
         auto ast = new ConstInitValAST();
+        ast->type = 0;
         ast->const_exp = unique_ptr<BaseAST>($1);
+        $$ = ast;
+    }
+    | '{' ConstInitValArray '}' {
+        auto ast = new ConstInitValAST();
+        ast->type = 1;
+        ast->const_init_val_array = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    | '{' '}' {
+        auto ast = new ConstInitValAST();
+        ast->type = 1;
+        ast->const_init_val_array = nullptr;
+        $$ = ast;
+    }
+    ;
+
+ConstInitValArray
+    : ConstInitValArray ',' ConstExp {
+        auto ast = reinterpret_cast<ConstInitValArrayAST *>($1);
+        ast->vec_const_exps.push_back(unique_ptr<BaseAST>($3));
+        $$ = ast;
+    }
+    | ConstExp {
+        auto ast = new ConstInitValArrayAST();
+        ast->vec_const_exps.push_back(unique_ptr<BaseAST>($1));
+        $$ = ast;
+    }
+    ;
+
+ConstExpArray
+    : '[' ConstExp ']' {
+        auto ast = new ConstExpArrayAST();
+        ast->const_exp = unique_ptr<BaseAST>($2);
         $$ = ast;
     }
     ;
@@ -203,13 +246,29 @@ VarDef
     : IDENT {
         auto ast = new VarDefAST();
         ast->ident = *unique_ptr<string>($1);
+        ast->const_exp_array = nullptr;
         ast->init_val = nullptr;
         $$ = ast;
     }
     | IDENT '=' InitVal {
         auto ast = new VarDefAST();
         ast->ident = *unique_ptr<string>($1);
+        ast->const_exp_array = nullptr;
         ast->init_val = unique_ptr<BaseAST>($3);
+        $$ = ast;
+    }
+    | IDENT ConstExpArray {
+        auto ast = new VarDefAST();
+        ast->ident = *unique_ptr<string>($1);
+        ast->const_exp_array = unique_ptr<BaseAST>($2);
+        ast->init_val = nullptr;
+        $$ = ast;
+    }
+    | IDENT ConstExpArray '=' InitVal {
+        auto ast = new VarDefAST();
+        ast->ident = *unique_ptr<string>($1);
+        ast->const_exp_array = unique_ptr<BaseAST>($2);
+        ast->init_val = unique_ptr<BaseAST>($4);
         $$ = ast;
     }
     ;
@@ -217,7 +276,36 @@ VarDef
 InitVal
     : Exp {
         auto ast = new InitValAST();
+        ast->type = 0;
         ast->exp = unique_ptr<BaseAST>($1);
+        ast->init_val_array = nullptr;
+        $$ = ast;
+    }
+    | '{' InitValArray '}' {
+        auto ast = new InitValAST();
+        ast->type = 1;
+        ast->exp = nullptr;
+        ast->init_val_array = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    | '{' '}' {
+        auto ast = new InitValAST();
+        ast->type = 1;
+        ast->exp = nullptr;
+        ast->init_val_array = nullptr;
+        $$ = ast;
+    }
+    ;
+
+InitValArray
+    : InitValArray ',' Exp {
+        auto ast = reinterpret_cast<InitValArrayAST *>($1);
+        ast->vec_exps.push_back(unique_ptr<BaseAST>($3));
+        $$ = ast;
+    }
+    | Exp {
+        auto ast = new InitValArrayAST();
+        ast->vec_exps.push_back(unique_ptr<BaseAST>($1));
         $$ = ast;
     }
     ;
@@ -456,6 +544,21 @@ LVal
     : IDENT {
         auto ast = new LValAST();
         ast->ident = *unique_ptr<string>($1);
+        ast->exp_array = nullptr;
+        $$ = ast;
+    }
+    | IDENT ExpArray {
+        auto ast = new LValAST();
+        ast->ident = *unique_ptr<string>($1);
+        ast->exp_array = unique_ptr<BaseAST>($2);
+        $$ = ast;
+    }
+    ;
+
+ExpArray
+    : '[' Exp ']' {
+        auto ast = new ExpArrayAST();
+        ast->exp = unique_ptr<BaseAST>($2);
         $$ = ast;
     }
     ;

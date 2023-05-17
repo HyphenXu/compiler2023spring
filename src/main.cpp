@@ -64,10 +64,10 @@ int main(int argc, const char *argv[]) {
     stringstream ss;
     ss.clear();
     ss.str("");
-    streambuf* old_buffer = cout.rdbuf(ss.rdbuf());
+    // streambuf* old_buffer = cout.rdbuf(ss.rdbuf());
     ast->Dump2StringIR(nullptr);
     string string_koopair(ss.str());
-    cout.rdbuf(old_buffer);
+    // cout.rdbuf(old_buffer);
 
     if(cmode == CMODE_KOOPA){
         FILE *fp_out = fopen(output, "w");
