@@ -336,8 +336,10 @@ public:
             const_exp_array->Dump2StringIR(&cear);
             int array_length = cear.array_length;
 
+            symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top());
+
             if(param->is_global){
-                std::cout << "global @" << ident << "_" << cur_namespace;
+                std::cout << "global " << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                 std::cout << " = alloc ";
                 std::cout << "[";
                 std::cout << "i32";
@@ -364,7 +366,7 @@ public:
                 std::cout << std::endl;
             }
             else{
-                std::cout << "\t@" << ident << "_" << cur_namespace;
+                std::cout << "\t" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                 std::cout << " = alloc ";
                 std::cout << "[";
                 std::cout << "i32";
@@ -644,8 +646,10 @@ public:
                 int cur_namespace = stack_namespace.top();
                 assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
 
+                symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top());
+
                 if(is_global_var){
-                    std::cout << "global @" << ident << "_" << cur_namespace;
+                    std::cout << "global" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                     std::cout << " = alloc ";
                     std::cout << "[";
                     std::cout << "i32";
@@ -653,7 +657,7 @@ public:
                     std::cout << ", zeroinit" << std::endl;
                 }
                 else{
-                    std::cout << "\t@" << ident << "_" << cur_namespace;
+                    std::cout << "\t" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                     std::cout << " = alloc ";
                     std::cout << "[";
                     std::cout << "i32";
@@ -672,8 +676,10 @@ public:
                 int cur_namespace = stack_namespace.top();
                 assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
 
+                symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top());
+
                 if(is_global_var){
-                    std::cout << "global @" << ident << "_" << cur_namespace;
+                    std::cout << "global" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                     std::cout << " = alloc ";
                     std::cout << "[";
                     std::cout << "i32";
@@ -700,7 +706,7 @@ public:
                     }
                 }
                 else{
-                    std::cout << "\t@" << ident << "_" << cur_namespace;
+                    std::cout << "\t" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                     std::cout << " = alloc ";
                     std::cout << "[";
                     std::cout << "i32";
@@ -708,7 +714,7 @@ public:
 
                     for(int i = 0; i < array_length; ++i){
                         std::cout << "\t%" << result_id++ << " = getelemptr ";
-                        std::cout << "@" << ident << "_" << cur_namespace;
+                        std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                         std::cout << ", " << i << std::endl;
                         if(i < init_val_result.length){
                             std::cout << "\tstore ";
@@ -1427,7 +1433,7 @@ public:
                 /* Assign (lhs) */
                 lval->pointer = "%" + std::to_string(result_id++);
                 std::cout << "\t" << lval->pointer << " = getelemptr ";
-                std::cout << "@" << ident << "_" << cur_namespace;
+                std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                 if(ear.exp_idx.is_zero_depth){
                     std::cout << ", " << ear.exp_idx.result_number;
                 }
@@ -1440,7 +1446,7 @@ public:
                 /* Get Value (rhs) */
                 lval->pointer = "%" + std::to_string(result_id++);
                 std::cout << "\t" << lval->pointer << " = getelemptr ";
-                std::cout << "@" << ident << "_" << cur_namespace;
+                std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                 if(ear.exp_idx.is_zero_depth){
                     std::cout << ", " << ear.exp_idx.result_number;
                 }

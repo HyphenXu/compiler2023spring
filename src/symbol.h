@@ -11,6 +11,7 @@ typedef enum{
     SYMBOL_TYPE_CONST_INT,
     SYMBOL_TYPE_VAR_INT,
     SYMBOL_TYPE_FUNCTION,
+    SYMBOL_TYPE_ARRAY_INT,
 } symbol_type_t;
 
 typedef struct{
@@ -22,6 +23,7 @@ typedef struct{
 
     std::string func_type_return;
 
+    std::string array_pointer_int;
 } symbol_table_entry_t;
 
 class SymbolTable;
@@ -88,6 +90,11 @@ public:
         return get_st_entry(s).type == SYMBOL_TYPE_FUNCTION;
     }
 
+    bool bool_symbol_is_array_int(const std::string &s){
+        assert(bool_symbol_exist(s));
+        return get_st_entry(s).type == SYMBOL_TYPE_ARRAY_INT;
+    }
+
     void insert_const_definition_int(const std::string &s, int val_const_int){
         map_symbol2entry[s].type = SYMBOL_TYPE_CONST_INT;
         map_symbol2entry[s].val_const_int = val_const_int;
@@ -98,14 +105,14 @@ public:
         return get_st_entry(s).val_const_int;
     }
 
-    void insert_var_definition_int(const std::string &s, int cur_block){
+    void insert_var_definition_int(const std::string &s, int cur_ns){
         map_symbol2entry[s].type = SYMBOL_TYPE_VAR_INT;
-        map_symbol2entry[s].var_pointer_int = "@" + s + "_" + std::to_string(cur_block);
+        map_symbol2entry[s].var_pointer_int = "@" + s + "_" + std::to_string(cur_ns);
     }
 
-    void insert_var_func_param_int(const std::string &s, int cur_block){
+    void insert_var_func_param_int(const std::string &s, int cur_ns){
         map_symbol2entry[s].type = SYMBOL_TYPE_VAR_INT;
-        map_symbol2entry[s].var_pointer_int = "%" + s + "_" + std::to_string(cur_block);
+        map_symbol2entry[s].var_pointer_int = "%" + s + "_" + std::to_string(cur_ns);
     }
 
     std::string get_var_pointer_int(const std::string &s){
@@ -121,6 +128,16 @@ public:
     std::string get_func_return_type(const std::string &s){
         assert(bool_symbol_is_func(s));
         return get_st_entry(s).func_type_return;
+    }
+
+    void insert_array_definition_int(const std::string &s, int cur_ns){
+        map_symbol2entry[s].type = SYMBOL_TYPE_ARRAY_INT;
+        map_symbol2entry[s].array_pointer_int = "@" + s + "_" + std::to_string(cur_ns);
+    }
+
+    std::string get_array_pointer_int(const std::string &s){
+        assert(bool_symbol_is_array_int(s));
+        return get_st_entry(s).array_pointer_int;
     }
 
     void clear_table(){
