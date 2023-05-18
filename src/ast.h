@@ -23,7 +23,7 @@ typedef struct{
 
 typedef struct{
     bool lhs;
-    bool is_var;
+    bool is_const;
     int val;
     std::string pointer;
 } l_val_result_t;
@@ -377,10 +377,10 @@ public:
                     std::cout << "@" << ident << "_" << cur_namespace;
                     std::cout << ", " << i << std::endl;
                     if(i < civr.length){
-                        std::cout << "store " << civr.init_val[i];
+                        std::cout << "\tstore " << civr.init_val[i];
                     }
                     else{
-                        std::cout << "store 0";
+                        std::cout << "\tstore 0";
                     }
                     std::cout << " , %" << result_id - 1 << std::endl;
                 }
@@ -662,6 +662,7 @@ public:
                     std::cout << "[";
                     std::cout << "i32";
                     std::cout << ", " << array_length << "]";
+                    std::cout << std::endl;
                 }
             }
             else{
@@ -1142,7 +1143,7 @@ public:
             l_val_result.lhs = true;
             l_val->Dump2StringIR(&l_val_result);
 
-            assert(l_val_result.is_var);
+            assert(!l_val_result.is_const);
             if(exp_result.is_zero_depth){
                 std::cout << "\tstore " << exp_result.result_number
                         << ", " << l_val_result.pointer << std::endl;
@@ -1403,19 +1404,27 @@ public:
         if(exp_array == nullptr){
             if(lval->lhs){
                 assert(symbol_tables[cur_namespace].bool_symbol_is_var_int(ident));
-                lval->is_var = true;
+                lval->is_const = false;
                 lval->pointer =
                     symbol_tables[cur_namespace].get_var_pointer_int(ident);
             }
             else{
                 bool is_var = symbol_tables[cur_namespace].bool_symbol_is_var_int(ident);
-                lval->is_var = is_var;
+                bool is_array = symbol_tables[cur_namespace].bool_symbol_is_array_int(ident);
+                lval->is_const = !(is_var || is_array);
                 if(is_var){
                     lval->pointer =
                         symbol_tables[cur_namespace].get_var_pointer_int(ident);
 
                     std::cout << "\t%" << result_id++ << " = load "
                             << lval->pointer
+                            << std::endl;
+                }
+                else if(is_array){
+                    lval->pointer =
+                        symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                    std::cout << "\t%" << result_id++ << " = getelemptr "
+                            << lval->pointer << ", 0"
                             << std::endl;
                 }
                 else{
@@ -1428,7 +1437,7 @@ public:
             exp_array_result_t ear;
             exp_array->Dump2StringIR(&ear);
 
-            lval->is_var = true;
+            lval->is_const = false;
             if(lval->lhs){
                 /* Assign (lhs) */
                 lval->pointer = "%" + std::to_string(result_id++);
@@ -1527,7 +1536,7 @@ public:
             l_val_result.lhs = false;
             l_val->Dump2StringIR(&l_val_result);
 
-            if(l_val_result.is_var){
+            if(!l_val_result.is_const){
                 ((exp_result_t *)aux)->is_zero_depth = false;
                 ((exp_result_t *)aux)->result_id = result_id - 1;
             }
