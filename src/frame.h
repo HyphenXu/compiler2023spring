@@ -12,7 +12,7 @@
 #define STACK_IMM_POS_MAX   2047
 
 typedef struct{
-    int offset;
+    size_t offset;
     size_t array_elem_size;
 } frame_entry_t;
 

@@ -1,6 +1,7 @@
 #include "koopair.h"
 #include "frame.h"
 #include "array.h"
+#include "riscv.h"
 
 #include <iostream>
 #include <cassert>
@@ -12,7 +13,9 @@
  map_frame2size_t map_frame2size;
  map_frame2bool_t map_frame2is_with_call;
 
-static int register_counter = 0;
+ int register_counter = 0;
+
+static std::string rd, rs1, rs2, rs;
 
 static std::map<koopa_raw_value_t, std::string> globl2name;
 
@@ -25,7 +28,6 @@ void Visit(const koopa_raw_basic_block_t &bb);
 void Visit(const koopa_raw_value_t &value);
 
 void Visit(const koopa_raw_return_t &ret);
-void Visit(const koopa_raw_integer_t &integer);
 void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_store_t &store);
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value);
@@ -113,15 +115,9 @@ void Visit(const koopa_raw_function_t &func){
 
     /* Prologue */
     size_t frame_size = map_frame2size[frame];
-    if(frame_size > STACK_IMM_NEG_MAX){
-        /* TODO : li IMM to t0, add sp with t0 */
-        assert(false);
-    }
-    else{
-        std::cout << "\taddi\tsp, sp, " << -(int)frame_size << std::endl;
-        if(map_frame2is_with_call[frame]){
-            std::cout << "\tsw\tra, " << frame_size - 4 << "(sp)" << std::endl;
-        }
+    gen_addi("sp", "sp", -(int32_t)frame_size);
+    if(map_frame2is_with_call[frame]){
+        gen_sw("ra", (int32_t)(frame_size - 4), "sp");
     }
 
     std::cout << std::endl;
@@ -173,7 +169,6 @@ std::cerr<<"\tname:"<<value->name <<"\ttype_tag:" <<value->ty->tag <<"\tpointer_
         assert(false);
         break;
     case KOOPA_RVT_GET_ELEM_PTR:
-        /* TODO */
         Visit(kind.data.get_elem_ptr, value);
         break;
     case KOOPA_RVT_BINARY:
@@ -207,43 +202,22 @@ void Visit(const koopa_raw_return_t &ret){
     /* load return value if necessary */
     if(ret.value != nullptr){
         if(ret.value->kind.tag == KOOPA_RVT_INTEGER){
-            std::cout << "\tli\t" << "a0" << ", ";
-            std::cout << ret.value->kind.data.integer.value;
-            std::cout << std::endl;
+            gen_li("a0", ret.value->kind.data.integer.value);
         }
         else{
             assert((*frame).find(ret.value) != (*frame).end());
-            int offset_ret = (*frame)[ret.value].offset;
-            assert(offset_ret >= 0);
-            if(offset_ret > STACK_IMM_POS_MAX){
-                /* TODO */
-                assert(false);
-            }
-            else{
-                std::cout << "\tlw\t" << "a0" << ", ";
-                std::cout << offset_ret << "(sp)" << std::endl;
-            }
+            size_t offset_ret = (*frame)[ret.value].offset;
+            gen_lw("a0", (int32_t)offset_ret, "sp");
         }
     }
 
     /* Epilogue */
     size_t frame_size = map_frame2size[frame];
-    if(frame_size > STACK_IMM_POS_MAX){
-        /* TODO */
-        assert(false);
+    if(map_frame2is_with_call[frame]){
+        gen_lw("ra", (int32_t)(frame_size - 4), "sp");
     }
-    else{
-        if(map_frame2is_with_call[frame]){
-            std::cout << "\tlw\tra, " << frame_size - 4 << "(sp)" << std::endl;
-        }
-        std::cout << "\taddi\tsp, sp, " << frame_size << std::endl;
-    }
-    std::cout << "\tret" << std::endl;
-}
-
-void Visit(const koopa_raw_integer_t &integer){
-    std::cout << "\tli\t" << "t" << register_counter++ << ", ";
-    std::cout << integer.value << std::endl;
+    gen_addi("sp", "sp", (int32_t)frame_size);
+    gen_ret();
 }
 
 void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
@@ -264,45 +238,32 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
         }
         else{
             reg_lhs = "t" + std::to_string(register_counter);
-            Visit(lhs->kind.data.integer);
+            rd = "t" + std::to_string(register_counter++);
+            gen_li(rd, lhs->kind.data.integer.value);
         }
     }
     else{
         assert((*frame).find(lhs) != (*frame).end());
         reg_lhs = "t" + std::to_string(register_counter++);
-        int offset_lhs = (*frame)[lhs].offset;
-        assert(offset_lhs >= 0);
-        if(offset_lhs > STACK_IMM_POS_MAX){
-            /* TODO */
-            assert(false);
-        }
-        else{
-            std::cout << "\tlw\t" << reg_lhs << ", ";
-            std::cout << offset_lhs << "(sp)" << std::endl;
-        }
+        size_t offset_lhs = (*frame)[lhs].offset;
+        gen_lw(reg_lhs, (int32_t)offset_lhs, "sp");
     }
+
     if(rhs->kind.tag == KOOPA_RVT_INTEGER){
         if(rhs->kind.data.integer.value == 0){
             reg_rhs = "x0";
         }
         else{
             reg_rhs = "t" + std::to_string(register_counter);
-            Visit(rhs->kind.data.integer);
+            rd = "t" + std::to_string(register_counter++);
+            gen_li(rd, rhs->kind.data.integer.value);
         }
     }
     else{
         assert((*frame).find(rhs) != (*frame).end());
         reg_rhs = "t" + std::to_string(register_counter++);
-        int offset_rhs = (*frame)[rhs].offset;
-        assert(offset_rhs >= 0);
-        if(offset_rhs > STACK_IMM_POS_MAX){
-            /* TODO */
-            assert(false);
-        }
-        else{
-            std::cout << "\tlw\t" << reg_rhs << ", ";
-            std::cout << offset_rhs << "(sp)" << std::endl;
-        }
+        size_t offset_rhs = (*frame)[rhs].offset;
+        gen_lw(reg_rhs, (int32_t)offset_rhs, "sp");
     }
 
     reg_result = "t" + std::to_string(register_counter_init);
@@ -396,16 +357,8 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
     }
 
     assert((*frame).find(value) != (*frame).end());
-    int offset_result = (*frame)[value].offset;
-    assert(offset_result >= 0);
-    if(offset_result > STACK_IMM_POS_MAX){
-        /* TODO */
-        assert(false);
-    }
-    else{
-        std::cout << "\tsw\t" << reg_result << ", ";
-        std::cout << offset_result << "(sp)" << std::endl;
-    }
+    size_t offset_result = (*frame)[value].offset;
+    gen_sw(reg_result, offset_result, "sp");
 
     register_counter = register_counter_init;
 }
@@ -414,103 +367,67 @@ void Visit(const koopa_raw_store_t &store){
     if(store.value->kind.tag == KOOPA_RVT_FUNC_ARG_REF){
         size_t idx = store.value->kind.data.func_arg_ref.index;
         if(idx < 8){
-            int offset_dest = (*frame)[store.dest].offset;
-            assert(offset_dest >= 0);
-            if(offset_dest > STACK_IMM_POS_MAX){
-                /* TODO */
-                assert(false);
-            }
-            else{
-                std::cout << "\tsw\ta" << idx << ", ";
-                std::cout << offset_dest << "(sp)" << std::endl;
-            }
+            size_t offset_dest = (*frame)[store.dest].offset;
+            rs2 = "a" + std::to_string(idx);
+            gen_sw(rs2, (int32_t)offset_dest, "sp");
         }
         else{
             size_t frame_size = map_frame2size[frame];
             idx -= 8;
-            int offset_src = frame_size + idx * 4;
-            assert(offset_src >= 0);
-            if(offset_src > STACK_IMM_POS_MAX){
-                /* TODO */
-                assert(false);
-            }
-            else{
-                std::cout << "\tlw\tt" << register_counter << ", ";
-                std::cout << offset_src << "(sp)" << std::endl;
-            }
+            size_t offset_src = frame_size + idx * 4;
+            rs = "t" + std::to_string(register_counter++);
+            gen_lw(rs, offset_src, "sp");
 
-            int offset_dest = (*frame)[store.dest].offset;
-            assert(offset_dest >= 0);
-            if(offset_dest > STACK_IMM_POS_MAX){
-                /* TODO */
-                assert(false);
-            }
-            else{
-                std::cout << "\tsw\tt" << register_counter << ", ";
-                std::cout << offset_dest << "(sp)" << std::endl;
-            }
+            size_t offset_dest = (*frame)[store.dest].offset;
+            gen_sw(rs, offset_dest, "sp");
+            register_counter--;
         }
     }
     else{
+        int register_counter_original = register_counter;
+
         if(store.value->kind.tag == KOOPA_RVT_INTEGER){
-            Visit(store.value->kind.data.integer);
-            register_counter--;
+            rd = "t" + std::to_string(register_counter++);
+            gen_li(rd, store.value->kind.data.integer.value);
         }
         else{
 
-std::cerr << store.value->kind.tag << "," << store.value->name  << "," << store.value->ty->tag << "\n";
+// std::cerr << store.value->kind.tag << "," << store.value->name  << "," << store.value->ty->tag << "\n";
 
             assert((*frame).find(store.value) != (*frame).end());
-            int offset_src = (*frame)[store.value].offset;
-            assert(offset_src >= 0);
-            if(offset_src > STACK_IMM_POS_MAX){
-                /* TODO */
-                assert(false);
-            }
-            else{
-                std::cout << "\tlw\t" << "t" << register_counter << ", ";
-                std::cout << offset_src << "(sp)" << std::endl;
-            }
+            size_t offset_src = (*frame)[store.value].offset;
+            rs = "t" + std::to_string(register_counter++);
+            gen_lw(rs, offset_src, "sp");
         }
 
         if(store.dest->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
-            register_counter++;
-            std::cout << "\tla\tt" << register_counter << ", ";
-            std::cout << globl2name[store.dest] << std::endl;
+            rd = "t" + std::to_string(register_counter++);
+            gen_la(rd, globl2name[store.dest]);
 
-            std::cout << "\tsw\tt" << register_counter - 1 << ", ";
-            std::cout << "0(t" << register_counter << ")" << std::endl;
-            register_counter--;
+            rs2 = "t" + std::to_string(register_counter - 2);
+            rs1 = "t" + std::to_string(register_counter - 1);
+            gen_sw(rs2, 0, rs1);
         }
         else if(store.dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR){
             assert((*frame).find(store.dest) != (*frame).end());
-            int offset_dest = (*frame)[store.dest].offset;
-            assert(offset_dest >= 0);
-            if(offset_dest > STACK_IMM_POS_MAX){
-                /* TODO */
-                assert(false);
-            }
-            else{
-                std::cout << "\tlw\t" << "t" << register_counter + 1 << ", ";
-                std::cout << offset_dest << "(sp)" << std::endl;
-            }
-            std::cout << "\tsw\t" << "t" << register_counter << ", ";
-            std::cout << "0(" << "t" << register_counter + 1 << ")";
-            std::cout << std::endl;
+            size_t offset_dest = (*frame)[store.dest].offset;
+
+            rs = "t" + std::to_string(register_counter++);
+            gen_lw(rs, (int32_t)offset_dest, "sp");
+
+            rs2 = "t" + std::to_string(register_counter - 2);
+            rs1 = "t" + std::to_string(register_counter - 1);
+            gen_sw(rs2, 0, rs1);
         }
         else{
             assert((*frame).find(store.dest) != (*frame).end());
-            int offset_dest = (*frame)[store.dest].offset;
-            assert(offset_dest >= 0);
-            if(offset_dest > STACK_IMM_POS_MAX){
-                /* TODO */
-                assert(false);
-            }
-            else{
-                std::cout << "\tsw\t" << "t" << register_counter << ", ";
-                std::cout << offset_dest << "(sp)" << std::endl;
-            }
+            size_t offset_dest = (*frame)[store.dest].offset;
+
+            rs2 = "t" + std::to_string(register_counter - 1);
+            gen_sw(rs2, (int32_t)offset_dest, "sp");
         }
+
+        register_counter = register_counter_original;
     }
 }
 
@@ -519,84 +436,51 @@ void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
 std::cerr << "?" <<    load.src->kind.tag << "\n";
 
     if(load.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
-        std::cout << "\tla\tt" << register_counter << ", ";
-        std::cout << globl2name[load.src] << std::endl;
-
-        std::cout << "\tlw\tt" << register_counter << ", ";
-        std::cout << "0(t" << register_counter << ")" << std::endl;
+        rd = "t" + std::to_string(register_counter++);
+        gen_la(rd, globl2name[load.src]);
+        gen_lw(rd, 0, rd);
     }
     else if(load.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR){
         assert((*frame).find(load.src) != (*frame).end());
-        int offset_src = (*frame)[load.src].offset;
-        assert(offset_src >= 0);
-        if(offset_src > STACK_IMM_POS_MAX){
-            /* TODO */
-            assert(false);
-        }
-        else{
-            std::cout << "\tlw\t" << "t" << register_counter << ", ";
-            std::cout << offset_src << "(sp)" << std::endl;
-        }
-        std::cout << "\tlw\t" << "t" << register_counter << ", ";
-        std::cout << "0(" << "t" << register_counter << ")";
-        std::cout << std::endl;
+        size_t offset_src = (*frame)[load.src].offset;
+        rs = "t" + std::to_string(register_counter++);
+        gen_lw(rs, (int32_t)offset_src, "sp");
+        gen_lw(rs, 0, rs);
     }
     else{
         assert((*frame).find(load.src) != (*frame).end());
-        int offset_src = (*frame)[load.src].offset;
-        assert(offset_src >= 0);
-
-        if(offset_src > STACK_IMM_POS_MAX){
-            /* TODO */
-            assert(false);
-        }
-        else{
-            std::cout << "\tlw\t" << "t" << register_counter << ", ";
-            std::cout << offset_src << "(sp)" << std::endl;
-        }
+        size_t offset_src = (*frame)[load.src].offset;
+        rs = "t" + std::to_string(register_counter++);
+        gen_lw(rs, (int32_t)offset_src, "sp");
     }
 
     assert((*frame).find(value) != (*frame).end());
-    int offset_dest = (*frame)[value].offset;
-    assert(offset_dest >= 0);
-
-    if(offset_dest > STACK_IMM_POS_MAX){
-        /* TODO */
-        assert(false);
-    }
-    else{
-        std::cout << "\tsw\t" << "t" << register_counter << ", ";
-        std::cout << offset_dest << "(sp)" << std::endl;
-    }
+    size_t offset_dest = (*frame)[value].offset;
+    rs2 = "t" + std::to_string(register_counter - 1);
+    gen_sw(rs2, (int32_t)offset_dest, "sp");
+    --register_counter;
 }
 
 void Visit(const koopa_raw_branch_t &branch){
     if(branch.cond->kind.tag == KOOPA_RVT_INTEGER){
-        std::cout << "\tli\t" << "t" << register_counter << ", ";
-        std::cout << branch.cond->kind.data.integer.value << std::endl;
-        std::cout << "\tbnez\t" << "t" << register_counter << ", ";
-        std::cout << branch.true_bb->name + 1 << std::endl;
+        rd = "t" + std::to_string(register_counter++);
+        gen_li(rd, branch.cond->kind.data.integer.value);
+        gen_bnez(rd, branch.true_bb->name + 1);
     }
     else{
         assert((*frame).find(branch.cond) != (*frame).end());
-        int offset_cond = (*frame)[branch.cond].offset;
-        if(offset_cond > STACK_IMM_POS_MAX){
-            /* TODO */
-            assert(false);
-        }
-        else{
-            std::cout << "\tlw\t" << "t" << register_counter << ", ";
-            std::cout << offset_cond << "(sp)" << std::endl;
-        }
-        std::cout << "\tbnez\t" << "t" << register_counter << ", ";
-        std::cout << branch.true_bb->name + 1 << std::endl;
-    }
+        size_t offset_cond = (*frame)[branch.cond].offset;
 
-    std::cout << "\tj\t" << branch.false_bb->name + 1 << std::endl;
+        rs = "t" + std::to_string(register_counter++);
+        gen_lw(rs, (int32_t)offset_cond, "sp");
+        gen_bnez(rs, branch.true_bb->name + 1);
+    }
+    gen_j(branch.false_bb->name + 1);
+    --register_counter;
 }
 
 void Visit(const koopa_raw_jump_t &jump){
-    std::cout << "\tj\t" << jump.target->name + 1 << std::endl;
+    gen_j(jump.target->name + 1);
 }
 
 void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
@@ -609,78 +493,41 @@ void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
         if(idx < 8){
             if(param->kind.tag == KOOPA_RVT_INTEGER){
                 /* TODO: save the previous value in a[0-7]? */
-                std::cout << "\tli\ta" << idx << ", ";
-                std::cout << param->kind.data.integer.value << std::endl;
+                rd = "a" + std::to_string(idx);
+                gen_li(rd, param->kind.data.integer.value);
             }
             else{
                 assert((*frame).find(param) != (*frame).end());
-                int offset_param = (*frame)[param].offset;
-                assert(offset_param >= 0);
-                if(offset_param > STACK_IMM_POS_MAX){
-                    /* TODO */
-                    assert(false);
-                }
-                else{
-                    std::cout << "\tlw\ta" << idx << ", ";
-                    std::cout << offset_param << "(sp)" << std::endl;
-                }
+                size_t offset_param = (*frame)[param].offset;
+                rs = "a" + std::to_string(idx);
+                gen_lw(rs, (int32_t)offset_param, "sp");
             }
         }
         else{
             if(param->kind.tag == KOOPA_RVT_INTEGER){
-                std::cout << "\tli\tt" << register_counter << ", ";
-                std::cout << param->kind.data.integer.value << std::endl;
-
-                int offset_dest = (idx - 8) * 4;
-                assert(offset_dest >= 0);
-                if(offset_dest > STACK_IMM_POS_MAX){
-                    /* TODO */
-                    assert(false);
-                }
-                else{
-                    std::cout << "\tsw\tt" << register_counter << ", ";
-                    std::cout << offset_dest << "(sp)" << std::endl;
-                }
+                rd = "t" + std::to_string(register_counter++);
+                gen_li(rd, param->kind.data.integer.value);
+                size_t offset_dest = (idx - 8) * 4;
+                gen_sw(rd, (int32_t)offset_dest, "sp");
+                --register_counter;
             }
             else{
                 assert((*frame).find(param) != (*frame).end());
-                int offset_param = (*frame)[param].offset;
-                assert(offset_param >= 0);
-                if(offset_param > STACK_IMM_POS_MAX){
-                    /* TODO */
-                    assert(false);
-                }
-                else{
-                    std::cout << "\tlw\tt" << register_counter << ", ";
-                    std::cout << offset_param << "(sp)" << std::endl;
-                }
-
-                int offset_dest = (idx - 8) * 4;
-                if(offset_dest > STACK_IMM_POS_MAX){
-                    /* TODO */
-                    assert(false);
-                }
-                else{
-                    std::cout << "\tsw\tt" << register_counter << ", ";
-                    std::cout << offset_dest << "(sp)" << std::endl;
-                }
+                size_t offset_param = (*frame)[param].offset;
+                rs = "t" + std::to_string(register_counter++);
+                gen_lw(rs, (int32_t)offset_param, "sp");
+                size_t offset_dest = (idx - 8) * 4;
+                gen_sw(rs, (int32_t)offset_dest, "sp");
+                --register_counter;
             }
         }
     }
-    std::cout << "\tcall\t" << call.callee->name + 1 << std::endl;
+    gen_call(call.callee->name + 1);
 
     if(value->ty->tag != KOOPA_RTT_UNIT){
         assert((*frame).find(value) != (*frame).end());
-        int offset_dest = (*frame)[value].offset;
-        assert(offset_dest >= 0);
-        if(offset_dest > STACK_IMM_POS_MAX){
-            /* TODO */
-            assert(false);
-        }
-        else{
-            std::cout << "\tsw\ta0" << ", ";
-            std::cout << offset_dest << "(sp)" << std::endl;
-        }
+        size_t offset_dest = (*frame)[value].offset;
+        gen_sw("a0", (int32_t)offset_dest, "sp");
     }
 }
 
@@ -698,48 +545,32 @@ std::cerr << "?" << globl_alloc.init->kind.tag << "\t" << globl_alloc.init->kind
 
 void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t &value){
     if(get_elem_ptr.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
-        std::cout << "\tla\t" << "t" << register_counter << ", ";
-        std::cout << globl2name[get_elem_ptr.src] << std::endl;
-
-        // std::cout << "\tlw\t" << "t" << register_counter << ", ";
-        // std::cout << "0(t" << register_counter << ")" << std::endl;
+        rd = "t" + std::to_string(register_counter++);
+        gen_la(rd, globl2name[get_elem_ptr.src]);
+        // gen_lw(rd, 0, rd);
     }
     else{
         assert((*frame).find(get_elem_ptr.src) != (*frame).end());
-        int offset_base = (*frame)[get_elem_ptr.src].offset;
-        assert(offset_base >= 0);
-        if(offset_base > STACK_IMM_POS_MAX){
-            /* TODO */
-            assert(false);
-        }
-        else{
-            std::cout << "\taddi\t" << "t" << register_counter << ", sp, ";
-            std::cout << offset_base << std::endl;
-        }
+        size_t offset_base = (*frame)[get_elem_ptr.src].offset;
+        rd = "t" + std::to_string(register_counter++);
+        gen_addi(rd, "sp", (int32_t)offset_base);
     }
 
     if(get_elem_ptr.index->kind.tag == KOOPA_RVT_INTEGER){
-        std::cout << "\tli\t" << "t" << register_counter + 1 << ", ";
-        std::cout << get_elem_ptr.index->kind.data.integer.value;
-        std::cout << std::endl;
+        rd = "t" + std::to_string(register_counter++);
+        gen_li(rd, get_elem_ptr.index->kind.data.integer.value);
     }
     else{
         assert((*frame).find(get_elem_ptr.index) != (*frame).end());
-        int offset_idx = (*frame)[get_elem_ptr.index].offset;
-        assert(offset_idx >= 0);
-        if(offset_idx > STACK_IMM_POS_MAX){
-            /* TODO */
-            assert(false);
-        }
-        else{
-            std::cout << "\tlw\t" << "t" << register_counter + 1 << ", ";
-            std::cout << offset_idx << "(sp)" << std::endl;
-        }
+        size_t offset_idx = (*frame)[get_elem_ptr.index].offset;
+        rs = "t" + std::to_string(register_counter++);
+        gen_lw(rs, (int32_t)offset_idx, "sp");
     }
 
     assert(get_elem_ptr.src->ty->data.pointer.base->tag == KOOPA_RTT_ARRAY);
     size_t elem_size = size_of_type(get_elem_ptr.src->ty->data.pointer.base->data.array.base);
     assert(elem_size > 0);
+
     if((elem_size & (elem_size - 1)) == 0){
         int shift = 0;
         while(1){
@@ -749,37 +580,30 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t
             }
             shift += 1;
         }
-        std::cout << "\tli\t" << "t" << register_counter + 2 << ", ";
-        std::cout << shift << std::endl;
-
-        std::cout << "\tsll\t" << "t" << register_counter + 1 << ", ";
-        std::cout << "t" << register_counter + 1 << ", ";
-        std::cout << "t" << register_counter + 2 << std::endl;
+        rd = "t" + std::to_string(register_counter++);
+        gen_li(rd, shift);
+        rs1 = "t" + std::to_string(register_counter - 2);
+        gen_sll(rs1, rs1, rd);
+        --register_counter;
     }
     else{
-        std::cout << "\tli\t" << "t" << register_counter + 2 << ", ";
-        std::cout << elem_size;
-
-        std::cout << "\tmul\t" << "t" << register_counter + 1 << ", ";
-        std::cout << "t" << register_counter + 1 << ", ";
-        std::cout << "t" << register_counter + 2 << std::endl;
+        rd = "t" + std::to_string(register_counter++);
+        gen_li(rd, elem_size);
+        rs1 = "t" + std::to_string(register_counter - 2);
+        gen_mul(rs1, rs1, rd);
+        --register_counter;
     }
 
-    std::cout << "\tadd\t" << "t" << register_counter << ", ";
-    std::cout << "t" << register_counter << ", ";
-    std::cout << "t" << register_counter + 1 << std::endl;
+    rs1 = "t" + std::to_string(register_counter - 2);
+    rs2 = "t" + std::to_string(register_counter - 1);
+    gen_add(rs1, rs1, rs2);
+    --register_counter;
 
     assert((*frame).find(value) != (*frame).end());
-    int offset_dest = (*frame)[value].offset;
-    assert(offset_dest >= 0);
-    if(offset_dest > STACK_IMM_POS_MAX){
-        /* TODO */
-        assert(false);
-    }
-    else{
-        std::cout << "\tsw\t" << "t" << register_counter << ", ";
-        std::cout << offset_dest << "(sp)" << std::endl;
-    }
+    size_t offset_dest = (*frame)[value].offset;
+    rs2 = "t" + std::to_string(register_counter - 1);
+    gen_sw(rs2, (int32_t)offset_dest, "sp");
+    --register_counter;
 }
 
 
