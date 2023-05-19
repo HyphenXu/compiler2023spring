@@ -49,30 +49,113 @@ typedef struct{
 } decl_param_t;
 
 typedef struct{
-    int array_length;
-} const_exp_array_result_t;
+    int dim;
+    std::vector<int> array_size;
+} const_exps_result_t;
+
+// typedef struct{
+//     bool is_array;
+
+//     int val;
+
+//     int length;
+//     std::vector<int> init_val;
+// } const_init_val_result_t;
 
 typedef struct{
+    std::string ident;
+
     bool is_array;
 
-    int val;
+    int const_exp_result_number;
 
-    int length;
-    std::vector<int> init_val;
-} const_init_val_result_t;
+    int idx;
+    int level;  /* zeroinit is available only when level = -1 */
+    const_exps_result_t shape;
+    bool is_global;
+} const_init_val_param_t;
+
+// typedef struct{
+//     bool is_array;
+
+//     exp_result_t exp_result;
+
+//     int length;
+//     std::vector<exp_result_t> exp_result_array;
+// } init_val_result_t;
 
 typedef struct{
+    std::string ident;
+
     bool is_array;
 
     exp_result_t exp_result;
 
-    int length;
-    std::vector<exp_result_t> exp_result_array;
-} init_val_result_t;
+    int idx;
+    int level;
+    const_exps_result_t shape;
+    bool is_global;
+} init_val_param_t;
 
 typedef struct{
-    exp_result_t exp_idx;
-} exp_array_result_t;
+    int dim;
+    std::vector<exp_result_t> idx;
+} exps_result_t;
+
+static std::string gen_getelemptr_const_exp_koopa_code(
+        const std::string &pointer_array,
+        int idx, const_exps_result_t &shape){
+
+    int dim = shape.dim;
+    std::vector<int> array_idx = std::vector<int>(dim);
+
+    for(int i = dim - 1; i >= 0; --i){
+        array_idx[i] = idx % shape.array_size[i];
+        idx = idx / shape.array_size[i];
+    }
+
+    std::string pointer_lhs, pointer_rhs;
+    pointer_rhs = pointer_array;
+    for(int i = 0; i < dim; ++i){
+        pointer_lhs = "%" + std::to_string(result_id++);
+        std::cout << "\t" << pointer_lhs << " = getelemptr ";
+        std::cout << pointer_rhs << ", " << array_idx[i] << std::endl;
+        pointer_rhs = pointer_lhs;
+    }
+    return pointer_lhs;
+}
+
+static void gen_init_val_brackets_before(int idx, const_exps_result_t &shape){
+    int dim = shape.dim;
+    int alignment = 1;
+    for(int i = dim - 1; i >= 0; --i){
+        alignment *= shape.array_size[i];
+        if(idx % alignment == 0){
+            std::cout << "{";
+        }
+        else{
+            break;
+        }
+    }
+}
+
+static void gen_init_val_brackets_after(int idx, const_exps_result_t &shape){
+    int dim = shape.dim;
+    int alignment = 1;
+    for(int i = dim - 1; i >= 0; --i){
+        alignment *= shape.array_size[i];
+        if((idx + 1) % alignment == 0){
+            std::cout << "}";
+        }
+        else{
+            break;
+        }
+    }
+}
+
+// typedef struct{
+//     exp_result_t exp_idx;
+// } exps_result_t;
 
 /* Base AST class */
 class BaseAST;
@@ -90,13 +173,13 @@ class ConstDeclAST;
 class ConstDefsAST;
 class ConstDefAST;      /*TODO*/
 class ConstInitValAST;  /*TODO*/
-class ConstInitValArrayAST;
-class ConstExpArrayAST;
+class ConstInitValsAST;
+class ConstExpsAST;
 class VarDeclAST;
 class VarDefsAST;
 class VarDefAST;        /*TODO*/
 class InitValAST;       /*TODO*/
-class InitValArrayAST;
+class InitValsAST;
 
 /* Part 3: Func */
 class FuncDefAST;
@@ -114,7 +197,7 @@ class OpenStmtAST;
 /* Part 5: Exp */
 class ExpAST;
 class LValAST;          /*TODO*/
-class ExpArrayAST;
+class ExpsAST;
 class PrimaryExpAST;
 class UnaryExpAST;
 class FuncRParamsAST;
@@ -296,14 +379,14 @@ public:
 class ConstDefAST : public BaseAST {
 public:
     std::string ident;
-    std::unique_ptr<BaseAST> const_exp_array;
+    std::unique_ptr<BaseAST> const_exps;
     std::unique_ptr<BaseAST> const_init_val;
 
     void Dump() const override {
         std::cout << " ConstDefAST { ";
         std::cout << ident;
-        if(const_exp_array != nullptr){
-            const_exp_array->Dump();
+        if(const_exps != nullptr){
+            const_exps->Dump();
         }
         std::cout << " = ";
         const_init_val->Dump();
@@ -318,72 +401,61 @@ public:
         int cur_namespace = stack_namespace.top();
         assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
 
-        const_init_val_result_t civr;
-        const_init_val->Dump2StringIR(&civr);
-
-        if(const_exp_array == nullptr){
-            // exp_result_t const_exp_result;
-            // const_init_val->Dump2StringIR(&const_exp_result);
-            // assert(const_exp_result.is_zero_depth);
-            // int val = const_exp_result.result_number;
-            assert(!civr.is_array);
-            int val = civr.val;
-
-            symbol_tables[cur_namespace].insert_const_definition_int(ident, val);
+        if(const_exps == nullptr){
+            const_init_val_param_t civp;
+            civp.ident = ident;
+            civp.is_array = false;
+            const_init_val->Dump2StringIR(&civp);
+            symbol_tables[cur_namespace].insert_const_definition_int(
+                ident, civp.const_exp_result_number
+            );
         }
         else{
-            const_exp_array_result_t cear;
-            const_exp_array->Dump2StringIR(&cear);
-            int array_length = cear.array_length;
-
             symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top());
 
+            const_init_val_param_t civp;
+            civp.ident = ident;
+            civp.is_array = true;
+
+            civp.idx = 0;
+            civp.level = -1;
+
+            const_exps->Dump2StringIR(&civp.shape);
+            int dim = civp.shape.dim;
+
+            civp.is_global = param->is_global;
             if(param->is_global){
-                std::cout << "global " << symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                std::cout << "global ";
+                std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                 std::cout << " = alloc ";
-                std::cout << "[";
+                for(int i = 0; i < dim; ++i){
+                    std::cout << "[";
+                }
                 std::cout << "i32";
-                std::cout << ", " << array_length << "]";
+                for(int i = 0; i < dim; ++i){
+                    std::cout << ", "
+                    << civp.shape.array_size[dim - i - 1]
+                    << "]";
+                }
                 std::cout << ", ";
-                if(civr.length == 0){
-                    std::cout << "zeroinit";
-                }
-                else{
-                    std::cout << "{";
-                    for(int i = 0; i < array_length; ++i){
-                        if(i){
-                            std::cout << ", ";
-                        }
-                        if(i < civr.length){
-                            std::cout << civr.init_val[i];
-                        }
-                        else{
-                            std::cout << 0;
-                        }
-                    }
-                    std::cout << "}";
-                }
+                const_init_val->Dump2StringIR(&civp);
                 std::cout << std::endl;
             }
             else{
-                std::cout << "\t" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                std::cout << "\t";
+                std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                 std::cout << " = alloc ";
-                std::cout << "[";
-                std::cout << "i32";
-                std::cout << ", " << array_length << "]" << std::endl;
-
-                for(int i = 0; i < array_length; ++i){
-                    std::cout << "\t%" << result_id++ << " = getelemptr";
-                    std::cout << "@" << ident << "_" << cur_namespace;
-                    std::cout << ", " << i << std::endl;
-                    if(i < civr.length){
-                        std::cout << "\tstore " << civr.init_val[i];
-                    }
-                    else{
-                        std::cout << "\tstore 0";
-                    }
-                    std::cout << " , %" << result_id - 1 << std::endl;
+                for(int i = 0; i < dim; ++i){
+                    std::cout << "[";
                 }
+                std::cout << "i32";
+                for(int i = 0; i < dim; ++i){
+                    std::cout << ", "
+                    << civp.shape.array_size[dim - i - 1]
+                    << "]";
+                }
+                std::cout << std::endl;
+                const_init_val->Dump2StringIR(&civp);
             }
         }
     }
@@ -394,7 +466,7 @@ class ConstInitValAST : public BaseAST {
 public:
     int type;
     std::unique_ptr<BaseAST> const_exp;
-    std::unique_ptr<BaseAST> const_init_val_array;
+    std::unique_ptr<BaseAST> const_init_vals;
 
     void Dump() const override {
         std::cout << " ConstInitValAST { ";
@@ -404,8 +476,8 @@ public:
         }
         else{
             std::cout << " { ";
-            if(const_init_val_array != nullptr){
-                const_init_val_array->Dump();
+            if(const_init_vals != nullptr){
+                const_init_vals->Dump();
             }
             std::cout << " } ";
         }
@@ -413,36 +485,158 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        const_init_val_result_t *civr = (const_init_val_result_t *)aux;
-        if(type == 0){
-            civr->is_array = false;
-
+        const_init_val_param_t *civp = (const_init_val_param_t *)aux;
+        if(!civp->is_array){
+            assert(type == 0);
             exp_result_t const_exp_result;
             const_exp->Dump2StringIR(&const_exp_result);
             assert(const_exp_result.is_zero_depth);
-            civr->val = const_exp_result.result_number;
+            civp->const_exp_result_number = const_exp_result.result_number;
         }
         else{
-            civr->is_array = true;
+            if(civp->is_global){
+                if(type == 0){
+                    exp_result_t const_exp_result;
+                    const_exp->Dump2StringIR(&const_exp_result);
+                    assert(const_exp_result.is_zero_depth);
+                    gen_init_val_brackets_before(civp->idx, civp->shape);
+                    std::cout << const_exp_result.result_number;
+                    gen_init_val_brackets_after(civp->idx, civp->shape);
+                    ++civp->idx;
+                }
+                else{
+                    if(civp->level == -1 && const_init_vals == nullptr){
+                        /* zeroinit */
+                        std::cout << "zeroinit";
+                    }
+                    else{
+                        /* dims: [level, shape.dim-1] */
+                        int old_level = civp->level;
+                        int cur_dim = civp->shape.dim - 1;
 
-            if(const_init_val_array == nullptr){
-                civr->length = 0;
+                        /* assert align */
+                        assert(civp->idx % civp->shape.array_size[cur_dim] == 0);
+
+                        /* determine new level and alignment */
+                        int alignment = civp->shape.array_size[cur_dim];
+                        for(--cur_dim; cur_dim > old_level; --cur_dim){
+                            if(civp->idx % (alignment * civp->shape.array_size[cur_dim]) != 0){
+                                break;
+                            }
+                            alignment *= civp->shape.array_size[cur_dim];
+                        }
+                        civp->level = ++cur_dim;
+
+                        // std::cout << "{";
+                        if(const_init_vals != nullptr){
+                            const_init_vals->Dump2StringIR(aux);
+                        }
+                        else{
+                            gen_init_val_brackets_before(civp->idx, civp->shape);
+                            std::cout << "0";
+                            gen_init_val_brackets_after(civp->idx, civp->shape);
+                            ++civp->idx;
+                        }
+                        while(civp->idx % alignment != 0){
+                            std::cout << ", ";
+                            gen_init_val_brackets_before(civp->idx, civp->shape);
+                            std::cout << 0;
+                            gen_init_val_brackets_after(civp->idx, civp->shape);
+                            ++civp->idx;
+                        }
+                        // std::cout << "}";
+
+                        /* restore level */
+                        civp->level = old_level;
+                    }
+                }
             }
             else{
-                const_init_val_array->Dump2StringIR(civr);
+                if(type == 0){
+                    exp_result_t const_exp_result;
+                    const_exp->Dump2StringIR(&const_exp_result);
+                    assert(const_exp_result.is_zero_depth);
+
+                    std::string result_pointer = gen_getelemptr_const_exp_koopa_code(
+                        symbol_tables[stack_namespace.top()].get_array_pointer_int(civp->ident),
+                        civp->idx++, civp->shape
+                    );
+                    std::cout << "\tstore " << const_exp_result.result_number;
+                    std::cout << ", " << result_pointer << std::endl;
+                }
+                else{
+                    if(civp->level == -1 && const_init_vals == nullptr){
+                        /* zeroinit */
+                        int size_tot = 1;
+                        for(int i = 0; i < civp->shape.dim; ++i){
+                            size_tot *= civp->shape.array_size[i];
+                        }
+
+                        for(int i = 0; i < size_tot; ++i){
+                            std::string result_pointer = gen_getelemptr_const_exp_koopa_code(
+                                symbol_tables[stack_namespace.top()].get_array_pointer_int(civp->ident),
+                                i, civp->shape
+                            );
+                            std::cout << "\tstore 0";
+                            std::cout << ", " << result_pointer << std::endl;
+                        }
+                    }
+                    else{
+                        /* dims: [level, shape.dim-1] */
+                        int old_level = civp->level;
+                        int cur_dim = civp->shape.dim - 1;
+
+                        /* assert align */
+                        assert(civp->idx % civp->shape.array_size[cur_dim] == 0);
+
+                        /* determine new level and alignment */
+                        int alignment = civp->shape.array_size[cur_dim];
+                        for(--cur_dim; cur_dim > old_level; --cur_dim){
+                            if(civp->idx % (alignment * civp->shape.array_size[cur_dim]) != 0){
+                                break;
+                            }
+                            alignment *= civp->shape.array_size[cur_dim];
+                        }
+                        civp->level = ++cur_dim;
+
+                        if(const_init_vals != nullptr){
+                            const_init_vals->Dump2StringIR(aux);
+                        }
+                        else{
+                            std::string result_pointer = gen_getelemptr_const_exp_koopa_code(
+                                symbol_tables[stack_namespace.top()].get_array_pointer_int(civp->ident),
+                                civp->idx++, civp->shape
+                            );
+                            std::cout << "\tstore 0";
+                            std::cout << ", " << result_pointer << std::endl;
+                        }
+
+                        while(civp->idx % alignment != 0){
+                            std::string result_pointer = gen_getelemptr_const_exp_koopa_code(
+                                symbol_tables[stack_namespace.top()].get_array_pointer_int(civp->ident),
+                                civp->idx++, civp->shape
+                            );
+                            std::cout << "\tstore 0";
+                            std::cout << ", " << result_pointer << std::endl;
+                        }
+
+                        /* restore level */
+                        civp->level = old_level;
+                    }
+                }
             }
         }
     }
 };
 
-class ConstInitValArrayAST : public BaseAST {
+class ConstInitValsAST : public BaseAST {
 public:
-    std::vector<std::unique_ptr<BaseAST> > vec_const_exps;
+    std::vector<std::unique_ptr<BaseAST> > vec_const_init_vals;
 
     void Dump() const override {
-        std::cout << " ConstInitValArrayAST { ";
-        auto ii = vec_const_exps.begin();
-        auto ie = vec_const_exps.end();
+        std::cout << " ConstInitValsAST { ";
+        auto ii = vec_const_init_vals.begin();
+        auto ie = vec_const_init_vals.end();
         for(; ii != ie; ++ii){
             (*ii)->Dump();
         }
@@ -450,38 +644,51 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        const_init_val_result_t *civr = (const_init_val_result_t *)aux;
-        civr->init_val = std::vector<int>();
-        civr->length = 0;
-        auto ii = vec_const_exps.begin();
-        auto ie = vec_const_exps.end();
+        const_init_val_param_t *civp = (const_init_val_param_t *)aux;
+        auto ii = vec_const_init_vals.begin();
+        auto ie = vec_const_init_vals.end();
+        if(ii != ie){
+            (*ii)->Dump2StringIR(aux);
+            ++ii;
+        }
         for(; ii != ie; ++ii){
-            exp_result_t exp_result;
-            (*ii)->Dump2StringIR(&exp_result);
-            assert(exp_result.is_zero_depth);
-            civr->init_val.push_back(exp_result.result_number);
-            civr->length++;
+            if(civp->is_global){
+                std::cout << ", ";
+            }
+            (*ii)->Dump2StringIR(aux);
         }
     }
 };
 
-class ConstExpArrayAST : public BaseAST {
+class ConstExpsAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> const_exp;
+    std::vector<std::unique_ptr<BaseAST> > vec_const_exps;
 
     void Dump() const override {
-        std::cout << " ConstExpArrayAST { ";
-        std::cout << " [ ";
-        const_exp->Dump();
-        std::cout << " ] " << " } ";
+        std::cout << " ConstExpsAST { ";
+        auto ii = vec_const_exps.begin();
+        auto ie = vec_const_exps.end();
+        for(; ii != ie; ++ii){
+            std::cout << " [ ";
+            (*ii)->Dump();
+            std::cout << " ] ";
+        }
+        std::cout << " } ";
     }
 
     void Dump2StringIR(void *aux) const override {
-        const_exp_array_result_t *cear = (const_exp_array_result_t *)aux;
-        exp_result_t const_exp_result;
-        const_exp->Dump2StringIR(&const_exp_result);
-        assert(const_exp_result.is_zero_depth);
-        cear->array_length = const_exp_result.result_number;
+        const_exps_result_t *cer = (const_exps_result_t *)aux;
+        cer->dim = 0;
+        cer->array_size = std::vector<int>();
+        auto ii = vec_const_exps.begin();
+        auto ie = vec_const_exps.end();
+        for(; ii != ie; ++ii){
+            exp_result_t const_exp_result;
+            (*ii)->Dump2StringIR(&const_exp_result);
+            assert(const_exp_result.is_zero_depth);
+            cer->array_size.push_back(const_exp_result.result_number);
+            ++cer->dim;
+        }
     }
 };
 
@@ -536,13 +743,13 @@ class VarDefAST : public BaseAST {
 public:
     std::string ident;
     std::unique_ptr<BaseAST> init_val;
-    std::unique_ptr<BaseAST> const_exp_array;
+    std::unique_ptr<BaseAST> const_exps;
 
     void Dump() const override {
         std::cout << " VarDefAST { ";
         std::cout << ident;
-        if(const_exp_array != nullptr){
-            const_exp_array->Dump();
+        if(const_exps != nullptr){
+            const_exps->Dump();
         }
         if(init_val != nullptr){
             std::cout << " = ";
@@ -555,10 +762,11 @@ public:
         decl_param_t *param = (decl_param_t *)aux;
         /* FURTHER: what if other type */
         assert((param->b_type) == "int");
-        std::string string_koopa_type = "i32";
+        std::string base_type = "i32";
+
         bool is_global_var = param->is_global;
 
-        if(const_exp_array == nullptr){
+        if(const_exps == nullptr){
             if(init_val == nullptr){
                 int cur_namespace = stack_namespace.top();
                 assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
@@ -569,7 +777,7 @@ public:
                     std::cout << "global "
                     << symbol_tables[cur_namespace].get_var_pointer_int(ident)
                     << " = alloc "
-                    << string_koopa_type
+                    << base_type
                     << ", zeroinit"
                     << std::endl;
                 }
@@ -577,49 +785,46 @@ public:
                     std::cout << "\t"
                     << symbol_tables[cur_namespace].get_var_pointer_int(ident)
                     << " = alloc "
-                    << string_koopa_type
+                    << base_type
                     << std::endl;
                 }
             }
             else{
-                init_val_result_t init_val_result;
-                init_val->Dump2StringIR(&init_val_result);
+                init_val_param_t ivp;
+                ivp.ident = ident;
+                ivp.is_array = false;
+                init_val->Dump2StringIR(&ivp);
 
-                if(is_global_var){
+                if(param->is_global){
                     /*
                         TODO: what if not depth == 0?
                         e.g., int x = 1, y = x + 1; (?)
                     */
-                    assert(!init_val_result.is_array);
-                    assert(init_val_result.exp_result.is_zero_depth);
+                    assert(ivp.exp_result.is_zero_depth);
 
                     int cur_namespace = stack_namespace.top();
                     assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
-
                     symbol_tables[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
 
                     std::cout << "global "
                     << symbol_tables[cur_namespace].get_var_pointer_int(ident)
                     << " = alloc "
-                    << string_koopa_type
+                    << base_type
                     << ", "
-                    << init_val_result.exp_result.result_number
+                    << ivp.exp_result.result_number
                     << std::endl;
                 }
                 else{
                     std::string string_value_to_be_stored;
-                    if(init_val_result.exp_result.is_zero_depth){
-                        /* the value is in init_val_result.result_number */
-                        string_value_to_be_stored = std::to_string(init_val_result.exp_result.result_number);
+                    if(ivp.exp_result.is_zero_depth){
+                        string_value_to_be_stored = std::to_string(ivp.exp_result.result_number);
                     }
                     else{
-                        /* the value is in %init_val_result.result_id*/
-                        string_value_to_be_stored = "%" + std::to_string(init_val_result.exp_result.result_id);
+                        string_value_to_be_stored = "%" + std::to_string(ivp.exp_result.result_id);
                     }
 
                     int cur_namespace = stack_namespace.top();
                     assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
-
                     symbol_tables[cur_namespace].insert_var_definition_int(ident, stack_namespace.top());
 
                     std::string string_var_pointer = symbol_tables[cur_namespace].get_var_pointer_int(ident);
@@ -627,7 +832,7 @@ public:
                     std::cout << "\t"
                         << string_var_pointer
                         << " = alloc "
-                        << string_koopa_type
+                        << base_type
                         << std::endl;
 
                     std::cout << "\tstore "
@@ -639,99 +844,103 @@ public:
         }
         else{
             if(init_val == nullptr){
-                const_exp_array_result_t cear;
-                const_exp_array->Dump2StringIR(&cear);
-                int array_length = cear.array_length;
-
                 int cur_namespace = stack_namespace.top();
                 assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
-
                 symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top());
 
-                if(is_global_var){
-                    std::cout << "global" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                init_val_param_t ivp;
+                ivp.ident = ident;
+                ivp.is_array = true;
+
+                ivp.idx = 0;
+                ivp.level = -1;
+
+                const_exps->Dump2StringIR(&ivp.shape);
+                int dim = ivp.shape.dim;
+
+                ivp.is_global = param->is_global;
+
+                if(param->is_global){
+                    std::cout << "global ";
+                    std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                     std::cout << " = alloc ";
-                    std::cout << "[";
-                    std::cout << "i32";
-                    std::cout << ", " << array_length << "]";
-                    std::cout << ", zeroinit" << std::endl;
+                    for(int i = 0; i < dim; ++i){
+                        std::cout << "[";
+                    }
+                    std::cout << base_type;
+                    for(int i = 0; i < dim; ++i){
+                        std::cout << ", "
+                        << ivp.shape.array_size[dim - i - 1]
+                        << "]";
+                    }
+                    std::cout << ", zeroinit";
+                    std::cout << std::endl;
                 }
                 else{
-                    std::cout << "\t" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                    std::cout << "\t";
+                    std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                     std::cout << " = alloc ";
-                    std::cout << "[";
-                    std::cout << "i32";
-                    std::cout << ", " << array_length << "]";
+                    for(int i = 0; i < dim; ++i){
+                        std::cout << "[";
+                    }
+                    std::cout << base_type;
+                    for(int i = 0; i < dim; ++i){
+                        std::cout << ", "
+                        << ivp.shape.array_size[dim - i - 1]
+                        << "]";
+                    }
                     std::cout << std::endl;
                 }
             }
             else{
-                init_val_result_t init_val_result;
-                init_val->Dump2StringIR(&init_val_result);
-                assert(init_val_result.is_array);
-
-                const_exp_array_result_t cear;
-                const_exp_array->Dump2StringIR(&cear);
-                int array_length = cear.array_length;
-
                 int cur_namespace = stack_namespace.top();
                 assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
-
                 symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top());
 
-                if(is_global_var){
-                    std::cout << "global" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                init_val_param_t ivp;
+                ivp.ident = ident;
+                ivp.is_array = true;
+
+                ivp.idx = 0;
+                ivp.level = -1;
+
+                const_exps->Dump2StringIR(&ivp.shape);
+                int dim = ivp.shape.dim;
+
+                ivp.is_global = param->is_global;
+
+                if(param->is_global){
+                    std::cout << "global ";
+                    std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                     std::cout << " = alloc ";
-                    std::cout << "[";
-                    std::cout << "i32";
-                    std::cout << ", " << array_length << "]";
+                    for(int i = 0; i < dim; ++i){
+                        std::cout << "[";
+                    }
+                    std::cout << base_type;
+                    for(int i = 0; i < dim; ++i){
+                        std::cout << ", "
+                        << ivp.shape.array_size[dim - i - 1]
+                        << "]";
+                    }
                     std::cout << ", ";
-                    if(init_val_result.length == 0){
-                        std::cout << "zeroinit" << std::endl;
-                    }
-                    else{
-                        std::cout << "{";
-                        for(int i = 0; i < array_length; ++i){
-                            if(i){
-                                std::cout << ", ";
-                            }
-                            if(i < init_val_result.length){
-                                assert(init_val_result.exp_result_array[i].is_zero_depth);
-                                std::cout << init_val_result.exp_result_array[i].result_number;
-                            }
-                            else{
-                                std::cout << 0;
-                            }
-                        }
-                        std::cout << "}" << std::endl;
-                    }
+                    init_val->Dump2StringIR(&ivp);
+                    std::cout << std::endl;
                 }
                 else{
-                    std::cout << "\t" << symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                    std::cout << "\t";
+                    std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
                     std::cout << " = alloc ";
-                    std::cout << "[";
-                    std::cout << "i32";
-                    std::cout << ", " << array_length << "]" << std::endl;
-
-                    for(int i = 0; i < array_length; ++i){
-                        std::cout << "\t%" << result_id++ << " = getelemptr ";
-                        std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
-                        std::cout << ", " << i << std::endl;
-                        if(i < init_val_result.length){
-                            std::cout << "\tstore ";
-                            if(init_val_result.exp_result_array[i].is_zero_depth){
-                                std::cout << init_val_result.exp_result_array[i].result_number;
-                            }
-                            else{
-                                std::cout << "%";
-                                std::cout << init_val_result.exp_result_array[i].result_id;
-                            }
-                        }
-                        else{
-                            std::cout << "\tstore 0";
-                        }
-                        std::cout << ", %" << result_id - 1 << std::endl;
+                    for(int i = 0; i < dim; ++i){
+                        std::cout << "[";
                     }
+                    std::cout << base_type;
+                    for(int i = 0; i < dim; ++i){
+                        std::cout << ", "
+                        << ivp.shape.array_size[dim - i - 1]
+                        << "]";
+                    }
+                    std::cout << std::endl;
+                    init_val->Dump2StringIR(&ivp);
                 }
             }
         }
@@ -743,7 +952,7 @@ class InitValAST : public BaseAST {
 public:
     int type;
     std::unique_ptr<BaseAST> exp;
-    std::unique_ptr<BaseAST> init_val_array;
+    std::unique_ptr<BaseAST> init_vals;
 
     void Dump() const override {
         std::cout << " InitValAST { ";
@@ -753,8 +962,8 @@ public:
         }
         else{
             std::cout << " { ";
-            if(init_val_array != nullptr){
-                init_val_array->Dump();
+            if(init_vals != nullptr){
+                init_vals->Dump();
             }
             std::cout << " } ";
         }
@@ -762,33 +971,153 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        init_val_result_t *ivr = (init_val_result_t *)aux;
-        if(type == 0){
-            ivr->is_array = false;
+        init_val_param_t *ivp = (init_val_param_t *)aux;
+        if(!ivp->is_array){
+            assert(type == 0);
             exp_result_t exp_result;
             exp->Dump2StringIR(&exp_result);
-            ivr->exp_result = exp_result;
+            ivp->exp_result = exp_result;
         }
         else{
-            ivr->is_array = true;
-            if(init_val_array == nullptr){
-                ivr->length = 0;
+            if(ivp->is_global){
+                if(type == 0){
+                    exp_result_t exp_result;
+                    exp->Dump2StringIR(&exp_result);
+                    assert(exp_result.is_zero_depth);
+                    gen_init_val_brackets_before(ivp->idx, ivp->shape);
+                    std::cout << exp_result.result_number;
+                    gen_init_val_brackets_after(ivp->idx, ivp->shape);
+                    ++ivp->idx;
+                }
+                else{
+                    if(ivp->level == -1 && init_vals == nullptr){
+                        std::cout << "zeroinit";
+                    }
+                    else{
+                        int old_level = ivp->level;
+                        int cur_dim = ivp->shape.dim - 1;
+
+                        assert(ivp->idx % ivp->shape.array_size[cur_dim] == 0);
+
+                        int alignment = ivp->shape.array_size[cur_dim];
+                        for(--cur_dim; cur_dim > old_level; --cur_dim){
+                            if(ivp->idx % (alignment * ivp->shape.array_size[cur_dim]) != 0){
+                                break;
+                            }
+                            alignment *= ivp->shape.array_size[cur_dim];
+                        }
+                        ivp->level = ++cur_dim;
+
+                        // std::cout << "{";
+                        if(init_vals != nullptr){
+                            init_vals->Dump2StringIR(aux);
+                        }
+                        else{
+                            gen_init_val_brackets_before(ivp->idx, ivp->shape);
+                            std::cout << "0";
+                            gen_init_val_brackets_after(ivp->idx, ivp->shape);
+                            ++ivp->idx;
+                        }
+                        while(ivp->idx % alignment != 0){
+                            std::cout << ", ";
+                            gen_init_val_brackets_before(ivp->idx, ivp->shape);
+                            std::cout << "0";
+                            gen_init_val_brackets_after(ivp->idx, ivp->shape);
+                            ++ivp->idx;
+                        }
+                        // std::cout << "}";
+
+                        ivp->level = old_level;
+                    }
+                }
             }
             else{
-                init_val_array->Dump2StringIR(ivr);
+                if(type == 0){
+                    exp_result_t exp_result;
+                    exp->Dump2StringIR(&exp_result);
+
+                    std::string result_pointer = gen_getelemptr_const_exp_koopa_code(
+                        symbol_tables[stack_namespace.top()].get_array_pointer_int(ivp->ident),
+                        ivp->idx++, ivp->shape
+                    );
+
+                    std::cout << "\tstore ";
+                    if(exp_result.is_zero_depth){
+                        std::cout << exp_result.result_number;
+                    }
+                    else{
+                        std::cout << "%" << exp_result.result_id;
+                    }
+                    std::cout << ", " << result_pointer << std::endl;
+                }
+                else{
+                    if(ivp->level == -1 && init_vals == nullptr){
+                        int size_tot = 1;
+                        for(int i = 0; i < ivp->shape.dim; ++i){
+                            size_tot *= ivp->shape.array_size[i];
+                        }
+
+                        for(int i = 0; i < size_tot; ++i){
+                            std::string result_pointer = gen_getelemptr_const_exp_koopa_code(
+                                symbol_tables[stack_namespace.top()].get_array_pointer_int(ivp->ident),
+                                i, ivp->shape
+                            );
+                            std::cout << "\tstore 0";
+                            std::cout << ", " << result_pointer << std::endl;
+                        }
+                    }
+                    else{
+                        int old_level = ivp->level;
+                        int cur_dim = ivp->shape.dim - 1;
+
+                        assert(ivp->idx % ivp->shape.array_size[cur_dim] == 0);
+
+                        int alignment = ivp->shape.array_size[cur_dim];
+                        for(--cur_dim; cur_dim > old_level; --cur_dim){
+                            if(ivp->idx % (alignment * ivp->shape.array_size[cur_dim]) != 0){
+                                break;
+                            }
+                            alignment *= ivp->shape.array_size[cur_dim];
+                        }
+                        ivp->level = ++cur_dim;
+
+                        if(init_vals != nullptr){
+                            init_vals->Dump2StringIR(aux);
+                        }
+                        else{
+                            std::string result_pointer = gen_getelemptr_const_exp_koopa_code(
+                                symbol_tables[stack_namespace.top()].get_array_pointer_int(ivp->ident),
+                                ivp->idx++, ivp->shape
+                            );
+                            std::cout << "\tstore 0";
+                            std::cout << ", " << result_pointer << std::endl;
+                        }
+
+                        while(ivp->idx % alignment != 0){
+                            std::string result_pointer = gen_getelemptr_const_exp_koopa_code(
+                                symbol_tables[stack_namespace.top()].get_array_pointer_int(ivp->ident),
+                                ivp->idx++, ivp->shape
+                            );
+                            std::cout << "\tstore 0";
+                            std::cout << ", " << result_pointer << std::endl;
+                        }
+
+                        ivp->level = old_level;
+                    }
+                }
             }
         }
     }
 };
 
-class InitValArrayAST : public BaseAST {
+class InitValsAST : public BaseAST {
 public:
-    std::vector<std::unique_ptr<BaseAST> > vec_exps;
+    std::vector<std::unique_ptr<BaseAST> > vec_init_vals;
 
     void Dump() const override {
-        std::cout << " InitValArrayAST { ";
-        auto ii = vec_exps.begin();
-        auto ie = vec_exps.end();
+        std::cout << " InitValsAST { ";
+        auto ii = vec_init_vals.begin();
+        auto ie = vec_init_vals.end();
         for(; ii != ie; ++ii){
             (*ii)->Dump();
         }
@@ -796,16 +1125,18 @@ public:
     }
 
     void Dump2StringIR(void *aux) const override {
-        init_val_result_t *ivr = (init_val_result_t *)aux;
-        ivr->exp_result_array = std::vector<exp_result_t>();
-        ivr->length = 0;
-        auto ii = vec_exps.begin();
-        auto ie = vec_exps.end();
+        init_val_param_t *ivp = (init_val_param_t *)aux;
+        auto ii = vec_init_vals.begin();
+        auto ie = vec_init_vals.end();
+        if(ii != ie){
+            (*ii)->Dump2StringIR(aux);
+            ++ii;
+        }
         for(; ii != ie; ++ii){
-            exp_result_t exp_result;
-            (*ii)->Dump2StringIR(&exp_result);
-            ivr->exp_result_array.push_back(exp_result);
-            ivr->length++;
+            if(ivp->is_global){
+                std::cout << ", ";
+            }
+            (*ii)->Dump2StringIR(aux);
         }
     }
 };
@@ -1387,13 +1718,13 @@ public:
 class LValAST : public BaseAST {
 public:
     std::string ident;
-    std::unique_ptr<BaseAST> exp_array;
+    std::unique_ptr<BaseAST> exps;
 
     void Dump() const override {
         std::cout << " LValAST { ";
         std::cout << ident;
-        if(exp_array != nullptr){
-            exp_array->Dump();
+        if(exps != nullptr){
+            exps->Dump();
         }
         std::cout << " } ";
     }
@@ -1401,7 +1732,7 @@ public:
     void Dump2StringIR(void *aux) const override {
         l_val_result_t *lval = (l_val_result_t *)aux;
         int cur_namespace = stack_namespace.top();
-        if(exp_array == nullptr){
+        if(exps == nullptr){
             if(lval->lhs){
                 assert(symbol_tables[cur_namespace].bool_symbol_is_var_int(ident));
                 lval->is_const = false;
@@ -1434,35 +1765,47 @@ public:
             }
         }
         else{
-            exp_array_result_t ear;
-            exp_array->Dump2StringIR(&ear);
+            exps_result_t exps_result;
+            exps->Dump2StringIR(&exps_result);
 
             lval->is_const = false;
             if(lval->lhs){
                 /* Assign (lhs) */
-                lval->pointer = "%" + std::to_string(result_id++);
-                std::cout << "\t" << lval->pointer << " = getelemptr ";
-                std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
-                if(ear.exp_idx.is_zero_depth){
-                    std::cout << ", " << ear.exp_idx.result_number;
+                std::string pointer_lhs, pointer_rhs;
+                pointer_rhs = symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                for(int i = 0; i < exps_result.dim; ++i){
+                    pointer_lhs = "%" + std::to_string(result_id++);
+                    std::cout << "\t" << pointer_lhs << " = getelemptr ";
+                    std::cout << pointer_rhs << ", ";
+                    if(exps_result.idx[i].is_zero_depth){
+                        std::cout << exps_result.idx[i].result_number;
+                    }
+                    else{
+                        std::cout << "%" << exps_result.idx[i].result_id;
+                    }
+                    std::cout << std::endl;
+                    pointer_rhs = pointer_lhs;
                 }
-                else{
-                    std::cout << ", " << "%" << ear.exp_idx.result_id;
-                }
-                std::cout << std::endl;
+                lval->pointer = pointer_lhs;
             }
             else{
                 /* Get Value (rhs) */
-                lval->pointer = "%" + std::to_string(result_id++);
-                std::cout << "\t" << lval->pointer << " = getelemptr ";
-                std::cout << symbol_tables[cur_namespace].get_array_pointer_int(ident);
-                if(ear.exp_idx.is_zero_depth){
-                    std::cout << ", " << ear.exp_idx.result_number;
+                std::string pointer_lhs, pointer_rhs;
+                pointer_rhs = symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                for(int i = 0; i < exps_result.dim; ++i){
+                    pointer_lhs = "%" + std::to_string(result_id++);
+                    std::cout << "\t" << pointer_lhs << " = getelemptr ";
+                    std::cout << pointer_rhs << ", ";
+                    if(exps_result.idx[i].is_zero_depth){
+                        std::cout << exps_result.idx[i].result_number;
+                    }
+                    else{
+                        std::cout << "%" << exps_result.idx[i].result_id;
+                    }
+                    std::cout << std::endl;
+                    pointer_rhs = pointer_lhs;
                 }
-                else{
-                    std::cout << ", " << "%" << ear.exp_idx.result_id;
-                }
-                std::cout << std::endl;
+                lval->pointer = pointer_lhs;
 
                 std::cout << "\t%" << result_id++ << " = load ";
                 std::cout << lval->pointer << std::endl;
@@ -1471,23 +1814,34 @@ public:
     }
 };
 
-class ExpArrayAST : public BaseAST {
+class ExpsAST : public BaseAST {
 public:
-    std::unique_ptr<BaseAST> exp;
+    std::vector<std::unique_ptr<BaseAST> > vec_exps;
 
     void Dump() const override {
-        std::cout << " ExpArrayAST { ";
-        std::cout << "[";
-        exp->Dump();
-        std::cout << "]";
+        std::cout << " ExpsAST { ";
+        auto ii = vec_exps.begin();
+        auto ie = vec_exps.end();
+        for(; ii != ie; ++ii){
+            std::cout << " [ ";
+            (*ii)->Dump();
+            std::cout << " ] ";
+        }
         std::cout << " } ";
     }
 
     void Dump2StringIR(void *aux) const override {
-        exp_array_result_t *ear = (exp_array_result_t *)aux;
-        exp_result_t exp_result;
-        exp->Dump2StringIR(&exp_result);
-        ear->exp_idx = exp_result;
+        exps_result_t *exps_result = (exps_result_t *)aux;
+        exps_result->dim = 0;
+        exps_result->idx = std::vector<exp_result_t>();
+        auto ii = vec_exps.begin();
+        auto ie = vec_exps.end();
+        for(; ii != ie; ++ii){
+            exp_result_t exp_result;
+            (*ii)->Dump2StringIR(&exp_result);
+            exps_result->idx.push_back(exp_result);
+            ++exps_result->dim;
+        }
     }
 };
 

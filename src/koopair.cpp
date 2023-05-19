@@ -549,6 +549,11 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t
         gen_la(rd, globl2name[get_elem_ptr.src]);
         // gen_lw(rd, 0, rd);
     }
+    else if(get_elem_ptr.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR){
+        rs = "t" + std::to_string(register_counter++);
+        size_t offset_src = (*frame)[get_elem_ptr.src].offset;
+        gen_lw(rs, (int32_t)offset_src, "sp");
+    }
     else{
         assert((*frame).find(get_elem_ptr.src) != (*frame).end());
         size_t offset_base = (*frame)[get_elem_ptr.src].offset;
