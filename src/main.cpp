@@ -24,6 +24,7 @@ extern int yyparse(unique_ptr<BaseAST> &ast);
 typedef enum{
     CMODE_KOOPA,
     CMODE_RISCV,
+    CMODE_PERF,
 } cmode_t;
 
 int main(int argc, const char *argv[]) {
@@ -41,6 +42,9 @@ int main(int argc, const char *argv[]) {
     }
     else if(strcmp(mode, "-riscv") == 0){
         cmode = CMODE_RISCV;
+    }
+    else if(strcmp(mode, "-perf") == 0){
+        cmode = CMODE_PERF;
     }
     else{
         assert(false);
@@ -75,7 +79,7 @@ int main(int argc, const char *argv[]) {
         return 0;
     }
     else
-    if(cmode == CMODE_RISCV){
+    if(cmode == CMODE_RISCV || cmode == CMODE_PERF){
         ofstream fout(output);
         streambuf* old_buffer = cout.rdbuf(fout.rdbuf());
         libkoopa_string2rawprog2riscv(string_koopair.c_str());
