@@ -3,7 +3,7 @@
 Course project of Compiler Principles (spring 2023).
 
 Heartfelt appreciation for the effort of the kind TA MaxXing and Prof. Liu,
-put in designing and organizting this course project, the Koopa IR and library,
+put in designing and organizing this course project, the Koopa IR and library,
 and the well-written documentation.
 
 ## Versions
