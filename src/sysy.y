@@ -400,8 +400,26 @@ FuncFParams
 FuncFParam
     : INT IDENT {
         auto ast = new FuncFParamAST();
+        ast->type = 0;
         ast->b_type = string("int");
         ast->ident = *unique_ptr<string>($2);
+        ast->const_exps = nullptr;
+        $$ = ast;
+    }
+    | INT IDENT '[' ']' {
+        auto ast = new FuncFParamAST();
+        ast->type = 1;
+        ast->b_type = string("int");
+        ast->ident = *unique_ptr<string>($2);
+        ast->const_exps = nullptr;
+        $$ = ast;
+    }
+    | INT IDENT '[' ']' ConstExps {
+        auto ast = new FuncFParamAST();
+        ast->type = 1;
+        ast->b_type = string("int");
+        ast->ident = *unique_ptr<string>($2);
+        ast->const_exps = unique_ptr<BaseAST>($5);
         $$ = ast;
     }
     ;

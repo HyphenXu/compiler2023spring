@@ -29,16 +29,6 @@ typedef struct{
 } l_val_result_t;
 
 typedef struct{
-    std::string ident;
-    std::string b_type;
-} func_f_param_result_t;
-
-typedef struct{
-    int count;
-    std::vector<func_f_param_result_t> params;
-} func_f_params_result_t;
-
-typedef struct{
     int count;
     std::vector<exp_result_t> params;
 } func_r_params_result_t;
@@ -74,6 +64,19 @@ typedef struct{
     const_exps_result_t shape;
     bool is_global;
 } const_init_val_param_t;
+
+typedef struct{
+    int type;
+    std::string ident;
+    std::string b_type;
+
+    const_exps_result_t shape;
+} func_f_param_result_t;
+
+typedef struct{
+    int count;
+    std::vector<func_f_param_result_t> params;
+} func_f_params_result_t;
 
 // typedef struct{
 //     bool is_array;
@@ -184,7 +187,7 @@ class InitValsAST;
 /* Part 3: Func */
 class FuncDefAST;
 class FuncFParamsAST;
-class FuncFParamAST;
+class FuncFParamAST;    /* TODO */
 
 /* Part 4: Block */
 class BlockAST;
@@ -411,8 +414,6 @@ public:
             );
         }
         else{
-            symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top());
-
             const_init_val_param_t civp;
             civp.ident = ident;
             civp.is_array = true;
@@ -422,6 +423,8 @@ public:
 
             const_exps->Dump2StringIR(&civp.shape);
             int dim = civp.shape.dim;
+
+            symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top(), dim);
 
             civp.is_global = param->is_global;
             if(param->is_global){
@@ -846,7 +849,6 @@ public:
             if(init_val == nullptr){
                 int cur_namespace = stack_namespace.top();
                 assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
-                symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top());
 
                 init_val_param_t ivp;
                 ivp.ident = ident;
@@ -857,6 +859,8 @@ public:
 
                 const_exps->Dump2StringIR(&ivp.shape);
                 int dim = ivp.shape.dim;
+
+                symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top(), dim);
 
                 ivp.is_global = param->is_global;
 
@@ -895,7 +899,6 @@ public:
             else{
                 int cur_namespace = stack_namespace.top();
                 assert(!symbol_tables[cur_namespace].bool_symbol_exist_local(ident));
-                symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top());
 
                 init_val_param_t ivp;
                 ivp.ident = ident;
@@ -906,6 +909,8 @@ public:
 
                 const_exps->Dump2StringIR(&ivp.shape);
                 int dim = ivp.shape.dim;
+
+                symbol_tables[cur_namespace].insert_array_definition_int(ident, stack_namespace.top(), dim);
 
                 ivp.is_global = param->is_global;
 
@@ -1238,13 +1243,23 @@ public:
 /* FuncFParam  ::= BType IDENT; */
 class FuncFParamAST : public BaseAST {
 public:
+    int type;
     std::string b_type;
     std::string ident;
+    std::unique_ptr<BaseAST> const_exps;
 
     void Dump() const override {
         std::cout << " FuncFParamAST { ";
+        std::cout << " type: " << type << ", ";
         std::cout << " BType:" << b_type << ", ";
         std::cout << ident;
+        if(type == 1){
+            std::cout << " [ ";
+            if(const_exps != nullptr){
+                const_exps->Dump();
+            }
+            std::cout << " ] ";
+        }
         std::cout << " } ";
     }
 
@@ -1253,8 +1268,31 @@ public:
 
         /* FURTHER: what if other types */
         assert(b_type == "int");
-        std::cout << "@" << ident << ": " << "i32";
+        std::string type_base = "i32";
 
+        if(type == 1){
+            if(const_exps != nullptr){
+                const_exps->Dump2StringIR(&param_r->shape);
+                std::cout << "@" << ident << ": " << "*";
+                int dim = param_r->shape.dim;
+                for(int i = dim - 1; i >= 0; --i){
+                    std::cout << "[";
+                }
+                std::cout << type_base;
+                for(int i = dim - 1; i >= 0; --i){
+                    std::cout << ", " << param_r->shape.array_size[i] << "]";
+                }
+            }
+            else{
+                param_r->shape.dim = 0;
+                std::cout << "@" << ident << ": " << "*" << type_base;
+            }
+        }
+        else{
+            std::cout << "@" << ident << ": " << type_base;
+        }
+
+        param_r->type = type;
         param_r->b_type = b_type;
         param_r->ident = ident;
     }
@@ -1291,14 +1329,50 @@ public:
 
                 /* FURTHER: what if other types */
                 assert(params->params[i].b_type == "int");
-                symbol_tables[id].insert_var_func_param_int(ident, id);
+                std::string type_base = "i32";
 
-                std::cout << "\t" << symbol_tables[id].get_var_pointer_int(ident);
-                std::cout << "= alloc i32" << std::endl;
+                if(params->params[i].type == 0){
+                    symbol_tables[id].insert_var_func_param_int(ident, id);
 
-                std::cout << "\tstore @" << ident << ", ";
-                std::cout << symbol_tables[id].get_var_pointer_int(ident);
-                std::cout << std::endl;
+                    std::cout << "\t" << symbol_tables[id].get_var_pointer_int(ident);
+                    std::cout << " = alloc " << type_base << std::endl;
+
+                    std::cout << "\tstore @" << ident << ", ";
+                    std::cout << symbol_tables[id].get_var_pointer_int(ident);
+                    std::cout << std::endl;
+                }
+                else{
+                    int dim = params->params[i].shape.dim;
+
+                    symbol_tables[id].insert_pointer_definition_int(ident, id, dim + 1);
+
+                    if(dim == 0){
+                        std::cout << "\t" << symbol_tables[id].get_pointer_pointer_int(ident);
+                        std::cout << " = alloc " << "*" << type_base << std::endl;
+
+                        std::cout << "\tstore @" << ident << ", ";
+                        std::cout << symbol_tables[id].get_pointer_pointer_int(ident);
+                        std::cout << std::endl;
+                    }
+                    else{
+                        std::cout << "\t" << symbol_tables[id].get_pointer_pointer_int(ident);
+                        std::cout << " = alloc " << "*";
+                        for(int i = dim - 1; i >= 0; --i){
+                            std::cout << "[";
+                        }
+                        std::cout << type_base;
+                        for(int i = dim - 1; i >= 0; --i){
+                            std::cout << ", ";
+                            std::cout << params->params[i].shape.array_size[i];
+                            std::cout << "]";
+                        }
+                        std::cout << std::endl;
+
+                        std::cout << "\tstore @" << ident << ", ";
+                        std::cout << symbol_tables[id].get_pointer_pointer_int(ident);
+                        std::cout << std::endl;
+                    }
+                }
             }
         }
 
@@ -1742,7 +1816,8 @@ public:
             else{
                 bool is_var = symbol_tables[cur_namespace].bool_symbol_is_var_int(ident);
                 bool is_array = symbol_tables[cur_namespace].bool_symbol_is_array_int(ident);
-                lval->is_const = !(is_var || is_array);
+                bool is_pointer = symbol_tables[cur_namespace].bool_symbol_is_pointer_int(ident);
+                lval->is_const = !(is_var || is_array || is_pointer);
                 if(is_var){
                     lval->pointer =
                         symbol_tables[cur_namespace].get_var_pointer_int(ident);
@@ -1758,6 +1833,9 @@ public:
                             << lval->pointer << ", 0"
                             << std::endl;
                 }
+                else if(is_pointer){
+                    assert(false);
+                }
                 else{
                     lval->val =
                         symbol_tables[cur_namespace].get_const_definition_int(ident);
@@ -1765,6 +1843,11 @@ public:
             }
         }
         else{
+            /* array or pointer */
+            bool is_array = symbol_tables[cur_namespace].bool_symbol_is_array_int(ident);
+            bool is_pointer = symbol_tables[cur_namespace].bool_symbol_is_pointer_int(ident);
+            assert(is_array || is_pointer);
+
             exps_result_t exps_result;
             exps->Dump2StringIR(&exps_result);
 
@@ -1772,10 +1855,34 @@ public:
             if(lval->lhs){
                 /* Assign (lhs) */
                 std::string pointer_lhs, pointer_rhs;
-                pointer_rhs = symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                int dim;
+                if(is_array){
+                    pointer_rhs = symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                    dim = symbol_tables[cur_namespace].get_array_dim_int(ident);
+                }
+                else if(is_pointer){
+                    pointer_rhs = symbol_tables[cur_namespace].get_pointer_pointer_int(ident);
+                    dim = symbol_tables[cur_namespace].get_pointer_dim_int(ident);
+                }
+                else{
+                    assert(false);
+                }
+                assert(dim == exps_result.dim);
                 for(int i = 0; i < exps_result.dim; ++i){
                     pointer_lhs = "%" + std::to_string(result_id++);
-                    std::cout << "\t" << pointer_lhs << " = getelemptr ";
+                    if(i == 0 && is_pointer){
+                        std::cout << "\t" << pointer_lhs;
+                        std::cout << " = load ";
+                        std::cout << pointer_rhs << std::endl;
+                        pointer_rhs = pointer_lhs;
+                        pointer_lhs = "%" + std::to_string(result_id++);
+                        std::cout << "\t" << pointer_lhs;
+                        std::cout << " = getptr ";
+                    }
+                    else{
+                        std::cout << "\t" << pointer_lhs;
+                        std::cout << " = getelemptr ";
+                    }
                     std::cout << pointer_rhs << ", ";
                     if(exps_result.idx[i].is_zero_depth){
                         std::cout << exps_result.idx[i].result_number;
@@ -1791,10 +1898,33 @@ public:
             else{
                 /* Get Value (rhs) */
                 std::string pointer_lhs, pointer_rhs;
-                pointer_rhs = symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                int dim;
+                if(is_array){
+                    pointer_rhs = symbol_tables[cur_namespace].get_array_pointer_int(ident);
+                    dim = symbol_tables[cur_namespace].get_array_dim_int(ident);
+                }
+                else if(is_pointer){
+                    pointer_rhs = symbol_tables[cur_namespace].get_pointer_pointer_int(ident);
+                    dim = symbol_tables[cur_namespace].get_pointer_dim_int(ident);
+                }
+                else{
+                    assert(false);
+                }
                 for(int i = 0; i < exps_result.dim; ++i){
                     pointer_lhs = "%" + std::to_string(result_id++);
-                    std::cout << "\t" << pointer_lhs << " = getelemptr ";
+                    if(i == 0 && is_pointer){
+                        std::cout << "\t" << pointer_lhs;
+                        std::cout << " = load ";
+                        std::cout << pointer_rhs << std::endl;
+                        pointer_rhs = pointer_lhs;
+                        pointer_lhs = "%" + std::to_string(result_id++);
+                        std::cout << "\t" << pointer_lhs;
+                        std::cout << " = getptr ";
+                    }
+                    else{
+                        std::cout << "\t" << pointer_lhs;
+                        std::cout << " = getelemptr ";
+                    }
                     std::cout << pointer_rhs << ", ";
                     if(exps_result.idx[i].is_zero_depth){
                         std::cout << exps_result.idx[i].result_number;
@@ -1805,10 +1935,19 @@ public:
                     std::cout << std::endl;
                     pointer_rhs = pointer_lhs;
                 }
+                if(exps_result.dim < dim){
+                    pointer_lhs = "%" + std::to_string(result_id++);
+                    std::cout << "\t" << pointer_lhs;
+                    std::cout << " = getelemptr ";
+                    std::cout << pointer_rhs << ", " << 0;
+                    std::cout << std::endl;
+                    pointer_rhs = pointer_lhs;
+                }
+                else{
+                    std::cout << "\t%" << result_id++ << " = load ";
+                    std::cout << pointer_lhs << std::endl;
+                }
                 lval->pointer = pointer_lhs;
-
-                std::cout << "\t%" << result_id++ << " = load ";
-                std::cout << lval->pointer << std::endl;
             }
         }
     }

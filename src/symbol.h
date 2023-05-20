@@ -12,6 +12,7 @@ typedef enum{
     SYMBOL_TYPE_VAR_INT,
     SYMBOL_TYPE_FUNCTION,
     SYMBOL_TYPE_ARRAY_INT,
+    SYMBOL_TYPE_POINTER_INT,
 } symbol_type_t;
 
 typedef struct{
@@ -24,6 +25,10 @@ typedef struct{
     std::string func_type_return;
 
     std::string array_pointer_int;
+    int dim_array;
+
+    std::string pointer_pointer_int;
+    int dim_pointer;
 } symbol_table_entry_t;
 
 class SymbolTable;
@@ -95,6 +100,11 @@ public:
         return get_st_entry(s).type == SYMBOL_TYPE_ARRAY_INT;
     }
 
+    bool bool_symbol_is_pointer_int(const std::string &s){
+        assert(bool_symbol_exist(s));
+        return get_st_entry(s).type == SYMBOL_TYPE_POINTER_INT;
+    }
+
     void insert_const_definition_int(const std::string &s, int val_const_int){
         map_symbol2entry[s].type = SYMBOL_TYPE_CONST_INT;
         map_symbol2entry[s].val_const_int = val_const_int;
@@ -131,14 +141,36 @@ public:
         return get_st_entry(s).func_type_return;
     }
 
-    void insert_array_definition_int(const std::string &s, int cur_ns){
+    void insert_array_definition_int(const std::string &s, int cur_ns, int dim){
         map_symbol2entry[s].type = SYMBOL_TYPE_ARRAY_INT;
         map_symbol2entry[s].array_pointer_int = "@" + s + "_" + std::to_string(cur_ns);
+        map_symbol2entry[s].dim_array = dim;
     }
 
     std::string get_array_pointer_int(const std::string &s){
         assert(bool_symbol_is_array_int(s));
         return get_st_entry(s).array_pointer_int;
+    }
+
+    int get_array_dim_int(const std::string &s){
+        assert(bool_symbol_is_array_int(s));
+        return get_st_entry(s).dim_array;
+    }
+
+    void insert_pointer_definition_int(const std::string &s, int cur_ns, int dim){
+        map_symbol2entry[s].type = SYMBOL_TYPE_POINTER_INT;
+        map_symbol2entry[s].pointer_pointer_int = "@" + s + "_" + std::to_string(cur_ns);
+        map_symbol2entry[s].dim_pointer = dim;
+    }
+
+    std::string get_pointer_pointer_int(const std::string &s){
+        assert(bool_symbol_is_pointer_int(s));
+        return get_st_entry(s).pointer_pointer_int;
+    }
+
+    int get_pointer_dim_int(const std::string &s){
+        assert(bool_symbol_is_pointer_int(s));
+        return get_st_entry(s).dim_pointer;
     }
 
     void clear_table(){
