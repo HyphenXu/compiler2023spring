@@ -1357,13 +1357,13 @@ public:
                     else{
                         std::cout << "\t" << symbol_tables[id].get_pointer_pointer_int(ident);
                         std::cout << " = alloc " << "*";
-                        for(int i = dim - 1; i >= 0; --i){
+                        for(int j = dim - 1; j >= 0; --j){
                             std::cout << "[";
                         }
                         std::cout << type_base;
-                        for(int i = dim - 1; i >= 0; --i){
+                        for(int j = dim - 1; j >= 0; --j){
                             std::cout << ", ";
-                            std::cout << params->params[i].shape.array_size[i];
+                            std::cout << params->params[i].shape.array_size[j];
                             std::cout << "]";
                         }
                         std::cout << std::endl;
@@ -1834,7 +1834,11 @@ public:
                             << std::endl;
                 }
                 else if(is_pointer){
-                    assert(false);
+                    lval->pointer =
+                        symbol_tables[cur_namespace].get_pointer_pointer_int(ident);
+                    std::cout << "\t%" << result_id++ << " = load "
+                            << lval->pointer
+                            << std::endl;
                 }
                 else{
                     lval->val =

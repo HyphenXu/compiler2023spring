@@ -11,7 +11,8 @@ size_t size_of_type(const koopa_raw_type_t &ty){
         break;
     case KOOPA_RTT_POINTER:
         /* TODO: might be wrong? */
-        return size_of_type(ty->data.pointer.base);
+        return SIZE_INT32;
+        // return size_of_type(ty->data.pointer.base);
         break;
     case KOOPA_RTT_FUNCTION:
         /* TODO */
@@ -19,6 +20,7 @@ size_t size_of_type(const koopa_raw_type_t &ty){
         break;
     case KOOPA_RTT_ARRAY:
         /* TODO */
+        std::cerr << ty->data.array.base->tag << "\n";
         return ty->data.array.len * size_of_type(ty->data.array.base);
         break;
     default:
@@ -49,6 +51,7 @@ void func_alloc_frame(const koopa_raw_function_t &func){
 
     frames[func->name] = frame_t();
     frame = &(frames[func->name]);
+    std::cerr << "funcname: " << func->name << "\n";
 
     frame_size = 0;
     max_num_args = 0;
@@ -78,7 +81,9 @@ void func_alloc_frame(const koopa_raw_function_t &func){
     for(size_t i = 0; i < func->bbs.len; ++i){
         auto bb = reinterpret_cast<koopa_raw_basic_block_t>(func->bbs.buffer[i]);
         assert(bb->insts.kind == KOOPA_RSIK_VALUE);
+        std::cerr << "bb " << i << "\n";
         for(size_t j = 0; j < bb->insts.len; ++j){
+            std::cerr << "\tinstr " << j << "\n";
             auto ptr = reinterpret_cast<koopa_raw_value_t>(bb->insts.buffer[j]);
 // std::cerr << "\tvalue ret type: " << ptr->ty->tag << "\n";
             switch (ptr->ty->tag)
@@ -88,6 +93,7 @@ void func_alloc_frame(const koopa_raw_function_t &func){
                 assert(ptr->name == nullptr);
                 (*frame)[ptr].offset = frame_size;
                 frame_size += size_of_type(ptr->ty);
+                std::cerr << "int " << frame_size - (*frame)[ptr].offset << "\n";
                 break;
             case KOOPA_RTT_UNIT:
                 /* No need of alloc */
@@ -95,7 +101,13 @@ void func_alloc_frame(const koopa_raw_function_t &func){
             case KOOPA_RTT_POINTER:
                 (*frame)[ptr].offset = frame_size;
                 // (*frame)[ptr].array_elem_size =
-                frame_size += size_of_type(ptr->ty);
+                if(ptr->kind.tag == KOOPA_RVT_ALLOC){
+                    frame_size += size_of_type(ptr->ty->data.pointer.base);
+                }
+                else{
+                    frame_size += SIZE_INT32;
+                }
+                std::cerr << "pointer " << frame_size - (*frame)[ptr].offset << "\n";
                 /* Alloc instruction */
                 break;
             case KOOPA_RTT_ARRAY:

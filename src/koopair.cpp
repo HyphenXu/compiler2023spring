@@ -36,6 +36,7 @@ void Visit(const koopa_raw_jump_t &jump);
 void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_global_alloc_t &globl_alloc, const koopa_raw_value_t &value);
 void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t &value);
+void Visit(const koopa_raw_get_ptr_t &get_ptr, const koopa_raw_value_t &value);
 
 /**
  * @brief string Koopa IR --(libkoopa)--> Koopa raw program --(Visit)--> RISCV
@@ -165,8 +166,7 @@ std::cerr<<"\tname:"<<value->name <<"\ttype_tag:" <<value->ty->tag <<"\tpointer_
         Visit(kind.data.store);
         break;
     case KOOPA_RVT_GET_PTR:
-        /* TODO */
-        assert(false);
+        Visit(kind.data.get_ptr, value);
         break;
     case KOOPA_RVT_GET_ELEM_PTR:
         Visit(kind.data.get_elem_ptr, value);
@@ -419,6 +419,17 @@ void Visit(const koopa_raw_store_t &store){
             rs1 = "t" + std::to_string(register_counter - 1);
             gen_sw(rs2, 0, rs1);
         }
+        else if(store.dest->kind.tag == KOOPA_RVT_GET_PTR){
+            assert((*frame).find(store.dest) != (*frame).end());
+            size_t offset_dest = (*frame)[store.dest].offset;
+
+            rs = "t" + std::to_string(register_counter++);
+            gen_lw(rs, (int32_t)offset_dest, "sp");
+
+            rs2 = "t" + std::to_string(register_counter - 2);
+            rs1 = "t" + std::to_string(register_counter - 1);
+            gen_sw(rs2, 0, rs1);
+        }
         else{
             assert((*frame).find(store.dest) != (*frame).end());
             size_t offset_dest = (*frame)[store.dest].offset;
@@ -441,6 +452,13 @@ std::cerr << "?" <<    load.src->kind.tag << "\n";
         gen_lw(rd, 0, rd);
     }
     else if(load.src->kind.tag == KOOPA_RVT_GET_ELEM_PTR){
+        assert((*frame).find(load.src) != (*frame).end());
+        size_t offset_src = (*frame)[load.src].offset;
+        rs = "t" + std::to_string(register_counter++);
+        gen_lw(rs, (int32_t)offset_src, "sp");
+        gen_lw(rs, 0, rs);
+    }
+    else if(load.src->kind.tag == KOOPA_RVT_GET_PTR){
         assert((*frame).find(load.src) != (*frame).end());
         size_t offset_src = (*frame)[load.src].offset;
         rs = "t" + std::to_string(register_counter++);
@@ -554,6 +572,11 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t
         size_t offset_src = (*frame)[get_elem_ptr.src].offset;
         gen_lw(rs, (int32_t)offset_src, "sp");
     }
+    else if(get_elem_ptr.src->kind.tag == KOOPA_RVT_GET_PTR){
+        rs = "t" + std::to_string(register_counter++);
+        size_t offset_src = (*frame)[get_elem_ptr.src].offset;
+        gen_lw(rs, (int32_t)offset_src, "sp");
+    }
     else{
         assert((*frame).find(get_elem_ptr.src) != (*frame).end());
         size_t offset_base = (*frame)[get_elem_ptr.src].offset;
@@ -611,6 +634,66 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t
     --register_counter;
 }
 
+void Visit(const koopa_raw_get_ptr_t &get_ptr, const koopa_raw_value_t &value){
+    if(get_ptr.src->kind.tag != KOOPA_RVT_LOAD){
+        std::cerr << "error; src RVT:" << get_ptr.src->kind.tag << "\n";
+        assert(false);
+    }
+
+    assert((*frame).find(get_ptr.src) != (*frame).end());
+    size_t offset_base = (*frame)[get_ptr.src].offset;
+    rd = "t" + std::to_string(register_counter++);
+    // gen_addi(rd, "sp", (int32_t)offset_base);
+    gen_lw(rd, (int32_t)offset_base, "sp");
+
+    if(get_ptr.index->kind.tag == KOOPA_RVT_INTEGER){
+        rd = "t" + std::to_string(register_counter++);
+        gen_li(rd, get_ptr.index->kind.data.integer.value);
+    }
+    else{
+        assert((*frame).find(get_ptr.index) != (*frame).end());
+        size_t offset_idx = (*frame)[get_ptr.index].offset;
+        rs = "t" + std::to_string(register_counter++);
+        gen_lw(rs, (int32_t)offset_idx, "sp");
+    }
+
+    size_t elem_size = size_of_type(get_ptr.src->ty->data.pointer.base);
+    assert(elem_size > 0);
+
+    if((elem_size & (elem_size - 1)) == 0){
+        int shift = 0;
+        while(1){
+            elem_size = elem_size >> 1;
+            if(elem_size == 0){
+                break;
+            }
+            shift += 1;
+        }
+        rd = "t" + std::to_string(register_counter++);
+        gen_li(rd, shift);
+        rs1 = "t" + std::to_string(register_counter - 2);
+        gen_sll(rs1, rs1, rd);
+        --register_counter;
+    }
+    else{
+        rd = "t" + std::to_string(register_counter++);
+        gen_li(rd, elem_size);
+        rs1 = "t" + std::to_string(register_counter - 2);
+        gen_mul(rs1, rs1, rd);
+        --register_counter;
+    }
+
+    rs1 = "t" + std::to_string(register_counter - 2);
+    rs2 = "t" + std::to_string(register_counter - 1);
+    gen_add(rs1, rs1, rs2);
+    --register_counter;
+
+    assert((*frame).find(value) != (*frame).end());
+    size_t offset_dest = (*frame)[value].offset;
+    rs2 = "t" + std::to_string(register_counter - 1);
+    gen_sw(rs2, (int32_t)offset_dest, "sp");
+    --register_counter;
+}
 
 /*
     Abandoned for now;

@@ -111,7 +111,6 @@ public:
     }
 
     int get_const_definition_int(const std::string &s){
-        std::cerr << "?" <<  s << "?" << "\n";
         assert(bool_symbol_is_const_int(s));
         return get_st_entry(s).val_const_int;
     }
