@@ -1196,8 +1196,12 @@ public:
         std::cout << "%" << "entry" << ":" << std::endl;
 
         block->Dump2StringIR(&func_f_params_result);
-
-        std::cout << "\tret" << std::endl;
+        if(func_type == "int"){
+            std::cout << "\tret 0" << std::endl;
+        }
+        else{
+            std::cout << "\tret" << std::endl;
+        }
         std::cout << "}" << std::endl;
     }
 };
@@ -2131,7 +2135,7 @@ public:
                 case '+':
                     /* do nothing */
                     result->is_zero_depth = result1.is_zero_depth;
-                    result->result_id = result_id;
+                    result->result_id = result1.result_id;
                     break;
                 case '-':
                     result->is_zero_depth = false;
