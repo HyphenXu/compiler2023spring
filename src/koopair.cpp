@@ -70,11 +70,11 @@ void Visit(const koopa_raw_program_t &program){
 
 void Visit(const koopa_raw_slice_t &slice){
 
-std::cerr << "slice_kind: " << slice.kind << "\t" <<"slice_len: " << slice.len << std::endl;
+// std::cerr << "slice_kind: " << slice.kind << "\t" <<"slice_len: " << slice.len << std::endl;
 
     for(size_t i = 0; i < slice.len; ++i){
 
-std::cerr << "slice_item" << i << std::endl;
+// std::cerr << "slice_item" << i << std::endl;
 
         auto ptr = slice.buffer[i];
         switch (slice.kind)
@@ -138,7 +138,7 @@ void Visit(const koopa_raw_basic_block_t &bb){
 /* Visit "value", but actually visit "inst" */
 void Visit(const koopa_raw_value_t &value){
 
-std::cerr << "\t" << "value_kind:" << value->kind.tag << "\t" << "type_tag:" << (value->ty->tag) << std::endl;
+// std::cerr << "\t" << "value_kind:" << value->kind.tag << "\t" << "type_tag:" << (value->ty->tag) << std::endl;
 
     const auto &kind = value->kind;
     switch (kind.tag)
@@ -150,7 +150,7 @@ std::cerr << "\t" << "value_kind:" << value->kind.tag << "\t" << "type_tag:" << 
 
     case KOOPA_RVT_ALLOC:
 
-std::cerr<<"\tname:"<<value->name <<"\ttype_tag:" <<value->ty->tag <<"\tpointer_type_tag:"<<value->ty->data.pointer.base->tag <<"\tvalue_used_by_len:"<<value->used_by.len<<std::endl;
+// std::cerr<<"\tname:"<<value->name <<"\ttype_tag:" <<value->ty->tag <<"\tpointer_type_tag:"<<value->ty->data.pointer.base->tag <<"\tvalue_used_by_len:"<<value->used_by.len<<std::endl;
 
         /* Already dealt with in prologue */
         break;
@@ -191,7 +191,7 @@ std::cerr<<"\tname:"<<value->name <<"\ttype_tag:" <<value->ty->tag <<"\tpointer_
         break;
     default:
         /*TODO: Other raw value types*/
-std::cerr << kind.tag << std::endl;
+// std::cerr << kind.tag << std::endl;
         assert(false);
         break;
     }
@@ -444,7 +444,7 @@ void Visit(const koopa_raw_store_t &store){
 
 void Visit(const koopa_raw_load_t &load, const koopa_raw_value_t &value){
 
-std::cerr << "?" <<    load.src->kind.tag << "\n";
+// std::cerr << "?" <<    load.src->kind.tag << "\n";
 
     if(load.src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC){
         rd = "t" + std::to_string(register_counter++);
@@ -551,7 +551,7 @@ void Visit(const koopa_raw_call_t &call, const koopa_raw_value_t &value){
 
 void Visit(const koopa_raw_global_alloc_t &globl_alloc, const koopa_raw_value_t &value){
 
-std::cerr << "?" << globl_alloc.init->kind.tag << "\t" << globl_alloc.init->kind.data.integer.value << "\n";
+// std::cerr << "?" << globl_alloc.init->kind.tag << "\t" << globl_alloc.init->kind.data.integer.value << "\n";
 
     std::cout << "\t.globl\t" << value->name + 1 << std::endl;
     std::cout << value->name + 1 << ":" << std::endl;
@@ -636,7 +636,7 @@ void Visit(const koopa_raw_get_elem_ptr_t &get_elem_ptr, const koopa_raw_value_t
 
 void Visit(const koopa_raw_get_ptr_t &get_ptr, const koopa_raw_value_t &value){
     if(get_ptr.src->kind.tag != KOOPA_RVT_LOAD){
-        std::cerr << "error; src RVT:" << get_ptr.src->kind.tag << "\n";
+        // std::cerr << "error; src RVT:" << get_ptr.src->kind.tag << "\n";
         assert(false);
     }
 
