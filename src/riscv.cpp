@@ -101,14 +101,14 @@ void gen_bnez(const std::string &rs, const std::string &label){
 }
 
 void gen_j(const std::string &label){
-    // std::cout << "\tj\t" << label;
-    // std::cout << std::endl;
-    /* TODO: careful with this*/
-    std::string rtemp = "t" + std::to_string(register_counter++);
-    gen_la(rtemp, label);
-    std::cout << "\tjr\t" << rtemp;
+    std::cout << "\tj\t" << label;
     std::cout << std::endl;
-    --register_counter;
+    // /* TODO: careful with this*/
+    // std::string rtemp = "t" + std::to_string(register_counter++);
+    // gen_la(rtemp, label);
+    // std::cout << "\tjr\t" << rtemp;
+    // std::cout << std::endl;
+    // --register_counter;
 }
 
 void gen_call(const std::string &label){
