@@ -27,6 +27,9 @@ static int l_or_exp_id = 0;
 static int l_and_exp_id = 0;
 static int while_id = 0;
 
+static int break_id = 0;
+static int continue_id = 0;
+
 %}
 
 /** Define extra parameter for parser and error handler.
@@ -543,11 +546,13 @@ Stmt
     | BREAK ';' {
         auto ast = new StmtAST();
         ast->type = STMT_BREAK;
+        ast->break_id = break_id++;
         $$ = ast;
     }
     | CONTINUE ';' {
         auto ast = new StmtAST();
         ast->type = STMT_CONTINUE;
+        ast->continue_id = continue_id++;
         $$ = ast;
     }
     ;

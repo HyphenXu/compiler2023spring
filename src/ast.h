@@ -1485,6 +1485,9 @@ public:
     int while_id;
     std::unique_ptr<BaseAST> stmt_body;
 
+    int break_id;
+    int continue_id;
+
     void Dump() const override {
         std::cout << " StmtAST { ";
         std::cout << " type: " << type << ", ";
@@ -1528,10 +1531,10 @@ public:
             std::cout << " } ";
             break;
         case STMT_BREAK:
-            std::cout << " break ; ";
+            std::cout << " break (" << break_id << "); ";
             break;
         case STMT_CONTINUE:
-            std::cout << "continue ; ";
+            std::cout << "continue (" << continue_id << "); ";
             break;
         default:
             assert(false);
@@ -1638,7 +1641,8 @@ public:
             target = stack_while_id.top();
 
             std::cout << "\tjump %while_end_" << target << std::endl;
-            std::cout << "%after_break_while_" << target << ":";
+            std::cout << "%after_break_" << break_id;
+            std::cout << "_while_" << target << ":";
             std::cout << std::endl;
             break;
         case STMT_CONTINUE:
@@ -1646,7 +1650,8 @@ public:
             target = stack_while_id.top();
 
             std::cout << "\tjump %while_cond_" << target << std::endl;
-            std::cout << "%after_continue_while_" << target << ":";
+            std::cout << "%after_continue_" << continue_id;
+            std::cout << "_while_" << target << ":";
             std::cout << std::endl;
             break;
         default:
