@@ -13,7 +13,7 @@ size_t size_of_raw_type(const koopa_raw_type_t &ty){
         return ty->data.array.len * size_of_raw_type(ty->data.array.base);
         break;
     default:
-        std::cerr << ty->tag << "\n";
+        // std::cerr << ty->tag << "\n";
         assert(false);
         break;
     }

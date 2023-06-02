@@ -3,6 +3,8 @@
 #include <iostream>
 #include <cassert>
 
+static int temp_label_id = 0;
+
 void gen_add(const std::string &rd, const std::string &rs1,
              const std::string &rs2){
     std::cout << "\tadd\t" << rd << ", " << rs1 << ", " << rs2;
@@ -87,13 +89,26 @@ void gen_la(const std::string &rd, const std::string &label){
 }
 
 void gen_bnez(const std::string &rs, const std::string &label){
-    std::cout << "\tbnez\t" << rs << ", " << label;
+    // std::cout << "\tbnez\t" << rs << ", " << label;
+    // std::cout << std::endl;
+    std::string temp_label = "temp_label_" + std::to_string(temp_label_id++);
+    std::cout << "\tbnez\t" << rs << ", " << temp_label;
     std::cout << std::endl;
+    std::cout << "\tj\t" << "after_" << temp_label << std::endl;
+    std::cout << temp_label << ":" << std::endl;
+    gen_j(label);
+    std::cout << "after_" << temp_label << ":" << std::endl;
 }
 
 void gen_j(const std::string &label){
-    std::cout << "\tj\t" << label;
+    // std::cout << "\tj\t" << label;
+    // std::cout << std::endl;
+    /* TODO: careful with this*/
+    std::string rtemp = "t" + std::to_string(register_counter++);
+    gen_la(rtemp, label);
+    std::cout << "\tjr\t" << rtemp;
     std::cout << std::endl;
+    --register_counter;
 }
 
 void gen_call(const std::string &label){

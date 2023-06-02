@@ -20,7 +20,7 @@ size_t size_of_type(const koopa_raw_type_t &ty){
         break;
     case KOOPA_RTT_ARRAY:
         /* TODO */
-        std::cerr << ty->data.array.base->tag << "\n";
+        // std::cerr << ty->data.array.base->tag << "\n";
         return ty->data.array.len * size_of_type(ty->data.array.base);
         break;
     default:
@@ -51,7 +51,7 @@ void func_alloc_frame(const koopa_raw_function_t &func){
 
     frames[func->name] = frame_t();
     frame = &(frames[func->name]);
-    std::cerr << "funcname: " << func->name << "\n";
+    // std::cerr << "funcname: " << func->name << "\n";
 
     frame_size = 0;
     max_num_args = 0;
@@ -68,7 +68,7 @@ void func_alloc_frame(const koopa_raw_function_t &func){
             if(ptr->kind.tag == KOOPA_RVT_CALL){
                 is_with_call = true;
                 size_t len_call_args = ptr->kind.data.call.args.len;
-                std::cerr << "\t\tcall: num of args " << ptr->kind.data.call.args.len << "\n";
+                // std::cerr << "\t\tcall: num of args " << ptr->kind.data.call.args.len << "\n";
                 if(len_call_args > max_num_args){
                     max_num_args = len_call_args;
                 }
@@ -81,9 +81,9 @@ void func_alloc_frame(const koopa_raw_function_t &func){
     for(size_t i = 0; i < func->bbs.len; ++i){
         auto bb = reinterpret_cast<koopa_raw_basic_block_t>(func->bbs.buffer[i]);
         assert(bb->insts.kind == KOOPA_RSIK_VALUE);
-        std::cerr << "bb " << i << "\n";
+        // std::cerr << "bb " << i << "\n";
         for(size_t j = 0; j < bb->insts.len; ++j){
-            std::cerr << "\tinstr " << j << "\n";
+            // std::cerr << "\tinstr " << j << "\n";
             auto ptr = reinterpret_cast<koopa_raw_value_t>(bb->insts.buffer[j]);
 // std::cerr << "\tvalue ret type: " << ptr->ty->tag << "\n";
             switch (ptr->ty->tag)
@@ -93,7 +93,7 @@ void func_alloc_frame(const koopa_raw_function_t &func){
                 assert(ptr->name == nullptr);
                 (*frame)[ptr].offset = frame_size;
                 frame_size += size_of_type(ptr->ty);
-                std::cerr << "int " << frame_size - (*frame)[ptr].offset << "\n";
+                // std::cerr << "int " << frame_size - (*frame)[ptr].offset << "\n";
                 break;
             case KOOPA_RTT_UNIT:
                 /* No need of alloc */
@@ -107,7 +107,7 @@ void func_alloc_frame(const koopa_raw_function_t &func){
                 else{
                     frame_size += SIZE_INT32;
                 }
-                std::cerr << "pointer " << frame_size - (*frame)[ptr].offset << "\n";
+                // std::cerr << "pointer " << frame_size - (*frame)[ptr].offset << "\n";
                 /* Alloc instruction */
                 break;
             case KOOPA_RTT_ARRAY:
