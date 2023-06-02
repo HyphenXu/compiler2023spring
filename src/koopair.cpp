@@ -229,8 +229,12 @@ void Visit(const koopa_raw_binary_t &binary, const koopa_raw_value_t &value){
 
     int register_counter_init = register_counter;
 
-    assert(!(lhs->kind.tag == KOOPA_RVT_INTEGER &&
-            rhs->kind.tag == KOOPA_RVT_INTEGER));
+    /*
+        TODO: this assertion is now wrong, due to the `ne 0,` operation when
+        dealing with short-circuit logic (land) in `ast.h`.
+    */
+    // assert(!(lhs->kind.tag == KOOPA_RVT_INTEGER &&
+    //         rhs->kind.tag == KOOPA_RVT_INTEGER));
 
     if(lhs->kind.tag == KOOPA_RVT_INTEGER){
         if(lhs->kind.data.integer.value == 0){
